@@ -109,9 +109,3 @@ This build includes:
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
 =======
-# Jflaps-with-better-UI
-it needed a UI revamp all rights reserved to original creator.
-
-Todo:
-1. add demo 
->>>>>>> 3176b2bb86fc449156c36b2941cdf8d63dff754b
