@@ -109,3 +109,6 @@ This build includes:
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
 =======
+TODO:
+release the build script Tommorow 
+More Ui fixes and improvements (next week or so)
