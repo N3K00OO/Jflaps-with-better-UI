@@ -1,0 +1,23 @@
+﻿JFLAP 7.1 - Modern UI build (unofficial)
+
+This file describes modifications made to the original JFLAP 7.1 distribution.
+The original JFLAP license text is included in this jar as `LICENSE`.
+
+What changed:
+- Added a launcher that uses FlatLaf for a more modern Swing UI.
+- Added View > Theme switching (saved) and a Command Palette (Ctrl+K).
+- Added View > Customize Theme... (RGB accent/background/canvas overrides, saved).
+- Patched JFLAP''s automaton canvas background fill to support custom canvas colors.
+- Patched JFLAP''s transition labels/colors so they remain visible on dark canvases.
+- Added runtime theming for toolbar icons and a visible delete cursor.
+
+Contact for these modifications:
+  egasudjali2@gmail.com
+
+Source code for these modifications is included in this jar under `launcher-src/` and `tools-src/`.
+
+Third-party licenses:
+- FlatLaf is licensed under the Apache License 2.0 (included as `META-INF/LICENSE`).
+
+Disclaimer:
+This is not an official JFLAP release and is not endorsed by the original author/maintainer.
