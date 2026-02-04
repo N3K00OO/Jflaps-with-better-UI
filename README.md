@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # JFLAP 7.1 Better UI (Unofficial)
 
 This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by wrapping it with a small launcher (Swing + FlatLaf) and applying a couple of tiny runtime/bytecode tweaks for readability.
@@ -107,3 +108,10 @@ This build includes:
 - Convenience copies of both licenses in `licenses/`
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
+=======
+# Jflaps-with-better-UI
+it needed a UI revamp all rights reserved to original creator.
+
+Todo:
+1. add demo 
+>>>>>>> 3176b2bb86fc449156c36b2941cdf8d63dff754b
