@@ -1,4 +1,3 @@
-
 # JFLAP 7.1 Better UI (Unofficial)
 
 This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by wrapping it with a small launcher (Swing + FlatLaf) and applying a couple of tiny runtime/bytecode tweaks for readability.
@@ -24,7 +23,7 @@ java -jar JFLAP7.1-better-ui.jar --help
 - Short flags: `--light`, `--dark`, `--intellij`, `--darcula`
 - Also supported: `-Djflap.theme=<theme>` or env var `JFLAP_THEME=<theme>`
 
-## What Changed 
+## What Changed
 
 - Modern look & feel via **FlatLaf** (defaults to **Darcula**).
 - `View > Theme` menu: IntelliJ / Darcula / Light / Dark (saved).
@@ -108,7 +107,9 @@ This build includes:
 - Convenience copies of both licenses in `licenses/`
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
-=======
+========================================================================================================
+
 TODO:
-release the build script Tommorow 
-More Ui fixes and improvements (next week or so)
+
+1. ~release the build script Tommorow~ (Done)
+2. More Ui fixes and improvements (next week or so)
