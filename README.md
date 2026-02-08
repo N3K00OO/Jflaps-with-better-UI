@@ -89,7 +89,7 @@ Requirements:
 powershell -File .\build-modern.ps1 -InputJar .\JFLAP7.1.jar -OutputJar .\JFLAP7.1-better-ui.jar
 ```
 
-## License / Redistribution Notes (Not Legal Advice)
+## License / Redistribution Notes 
 
 Per the **JFLAP 7.1** license, distributing modified copies requires (at minimum):
 
