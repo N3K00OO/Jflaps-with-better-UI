@@ -1,5 +1,7 @@
 package launcher;
 
+import gui.viewer.AutomatonPane;
+
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ActionMap;
@@ -122,6 +124,7 @@ public final class UiEnhancements {
                 } else {
                   applyReadabilityFixes(window);
                 }
+                installAutomatonCopyPasteBindings(window);
               }
             });
             return;
@@ -165,6 +168,7 @@ public final class UiEnhancements {
                 } else {
                   applyReadabilityFixes(window);
                 }
+                installAutomatonCopyPasteBindings(window);
               }
             });
           }
@@ -202,6 +206,7 @@ public final class UiEnhancements {
       injectViewMenu(frame);
       injectHelpMenu(frame);
       installMenuBarWatcher(frame);
+      installAutomatonCopyPasteBindings(frame);
       removeLegacyCloseButton(frame);
       modernizeBevelBorders(frame);
       AssetThemer.applyToWindow(frame);
@@ -214,6 +219,7 @@ public final class UiEnhancements {
       javax.swing.JDialog dialog = (javax.swing.JDialog) window;
       installCommandPaletteBinding(dialog.getRootPane());
       modernizeBevelBorders(dialog);
+      installAutomatonCopyPasteBindings(dialog);
       AssetThemer.applyToWindow(dialog);
       applyReadabilityFixes(dialog);
       scheduleReadabilityFix(dialog.getRootPane(), dialog);
@@ -986,6 +992,39 @@ public final class UiEnhancements {
     }
 
     return removedAny;
+  }
+
+  private static void installAutomatonCopyPasteBindings(Component root) {
+    if (root == null) {
+      return;
+    }
+
+    Queue<Component> queue = new ArrayDeque<>();
+    queue.add(root);
+
+    while (!queue.isEmpty()) {
+      Component c = queue.remove();
+      if (c instanceof AutomatonPane) {
+        AutomatonCopyPaste.installCopyPasteBindings((AutomatonPane) c);
+      }
+
+      if (c instanceof Container) {
+        Component[] children;
+        try {
+          children = ((Container) c).getComponents();
+        } catch (Throwable ignored) {
+          children = null;
+        }
+
+        if (children != null) {
+          for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+              queue.add(children[i]);
+            }
+          }
+        }
+      }
+    }
   }
 
   private static void installCommandPaletteBinding(JRootPane rootPane) {

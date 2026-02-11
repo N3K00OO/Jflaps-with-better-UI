@@ -1,8 +1,8 @@
 param(
   [string]$FlatLafVersion = "3.7",
   [string]$AsmVersion = "9.9.1",
-  [string]$InputJar = "JFLAP7.1-modern-reference.jar",
-  [string]$OutputJar = "JFLAP7.1.1-better-ui.jar",
+  [string]$InputJar = "JFLAP7.1.jar",
+  [string]$OutputJar = "JFLAP7.1.3-better-ui.jar",
   [switch]$Fat
 )
 

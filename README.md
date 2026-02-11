@@ -4,19 +4,19 @@ This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by w
 
 The primary distributables in this folder are:
 
-- `JFLAP7.1.1-better-ui.jar` (slim build)
-- `JFLAP7.1.1-better-ui-fat.jar` (optional, build with `-Fat`)
+- `JFLAP7.1.3-better-ui.jar` (slim build)
+- `JFLAP7.1.3-better-ui-fat.jar` (optional, build with `-Fat`)
 
 ## Run
 
 ```bash
-java -jar JFLAP7.1.1-better-ui.jar
+java -jar JFLAP7.1.3-better-ui.jar
 ```
 
 Launcher options:
 
 ```bash
-java -jar JFLAP7.1.1-better-ui.jar --help
+java -jar JFLAP7.1.3-better-ui.jar --help
 ```
 
 - `--theme=light|dark|intellij|darcula`
@@ -35,6 +35,7 @@ java -jar JFLAP7.1.1-better-ui.jar --help
   - Canvas background (optional checkbox)
   - Tip: you can also paste/type a hex color like `#1e1e1e`
 - `Ctrl+K`: Command Palette for quick actions.
+- `Ctrl+C` / `Ctrl+V`: canvas copy/paste for selected states/transitions (marquee selection supported, deterministic rename on paste).
 - Removes the legacy menu-bar close button artifact (extra "X"); use the normal window close button or `File > Close`.
 - Fixes a close-confirmation bug where clicking "Cancel" would still close the editor window.
 - File dialogs: uses the native OS Open/Save dialog (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
@@ -61,6 +62,7 @@ Open it with `Ctrl+K` (or `Cmd+K` on macOS) or via `View > Command Palette...`.
 - Pumping Lemma: fixed dark-mode text + enlarged the "Explain" area.
 - Help: added minimal `DOCS/` stubs to avoid missing-doc popups in slim builds.
 - Build: slim jar by default; `-Fat` keeps the full reference contents.
+- Canvas: added copy/paste on editor canvases (Ctrl+C/Ctrl+V).
 
 ## Screenshots
 
@@ -103,20 +105,24 @@ Requirements:
 - A JDK on PATH (`javac`, `jar`)
 - Internet access on first run (downloads FlatLaf + ASM to `deps/`)
 
+Place the original JFLAP jar in the repo root (for example: `JFLAP7.1.jar`) or pass an explicit path via `-InputJar`.
+
+Slim build:
+
 ```powershell
-.\build.ps1
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.3-better-ui.jar
 ```
 
 Fat build (keeps full reference jar contents):
 
 ```powershell
-.\build.ps1 -Fat
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.3-better-ui-fat.jar -Fat
 ```
 
-Slim build notes:
+Notes:
 
-- By default the build prunes dev-only content from the output jar (e.g. `.git/`, `assets/`, `DOCS/`, `README*`).
-- Use `.\build.ps1 -Fat` to keep everything from the reference jar.
+- First run downloads FlatLaf + ASM into `deps/`.
+- `build.ps1` delegates to `build-modern.ps1` and repackages the input jar plus launcher sources.
 
 ## License / Redistribution Notes
 

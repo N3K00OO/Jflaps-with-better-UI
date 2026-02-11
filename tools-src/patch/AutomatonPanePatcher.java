@@ -32,33 +32,50 @@ public final class AutomatonPanePatcher {
       @Override
       public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
         MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-        if (!TARGET_METHOD_DESC.equals(descriptor)) {
-          return mv;
-        }
-        if (!"paintComponent".equals(name) && !"printComponent".equals(name)) {
-          return mv;
-        }
-
-        return new MethodVisitor(Opcodes.ASM9, mv) {
-          @Override
-          public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDesc) {
-            if (opcode == Opcodes.GETSTATIC
-              && "java/awt/Color".equals(owner)
-              && "white".equals(fieldName)
-              && "Ljava/awt/Color;".equals(fieldDesc)) {
-              super.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "launcher/CanvasColors",
-                "canvasFillColor",
-                "()Ljava/awt/Color;",
-                false
-              );
-              return;
+        if ("<init>".equals(name) && "(Lgui/viewer/AutomatonDrawer;Z)V".equals(descriptor)) {
+          return new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override
+            public void visitInsn(int opcode) {
+              if (opcode == Opcodes.RETURN) {
+                super.visitVarInsn(Opcodes.ALOAD, 0);
+                super.visitMethodInsn(
+                  Opcodes.INVOKESTATIC,
+                  "launcher/AutomatonCopyPaste",
+                  "installCopyPasteBindings",
+                  "(Lgui/viewer/AutomatonPane;)V",
+                  false
+                );
+              }
+              super.visitInsn(opcode);
             }
+          };
+        }
 
-            super.visitFieldInsn(opcode, owner, fieldName, fieldDesc);
-          }
-        };
+        if (TARGET_METHOD_DESC.equals(descriptor)
+          && ("paintComponent".equals(name) || "printComponent".equals(name))) {
+          return new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override
+            public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDesc) {
+              if (opcode == Opcodes.GETSTATIC
+                && "java/awt/Color".equals(owner)
+                && "white".equals(fieldName)
+                && "Ljava/awt/Color;".equals(fieldDesc)) {
+                super.visitMethodInsn(
+                  Opcodes.INVOKESTATIC,
+                  "launcher/CanvasColors",
+                  "canvasFillColor",
+                  "()Ljava/awt/Color;",
+                  false
+                );
+                return;
+              }
+
+              super.visitFieldInsn(opcode, owner, fieldName, fieldDesc);
+            }
+          };
+        }
+
+        return mv;
       }
     };
 
@@ -68,4 +85,3 @@ public final class AutomatonPanePatcher {
     Files.write(classFile, patched);
   }
 }
-

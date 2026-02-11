@@ -1,0 +1,27 @@
+# Build outputs
+/JFLAP*.jar
+/out/
+/build/
+/dist/
+/target/
+/classes/
+/bin/
+
+# Downloaded dependencies
+/deps/
+
+# IDE/editor
+/.idea/
+*.iml
+
+# OS junk
+Thumbs.db
+.DS_Store
+.xvpics/
+
+# Temp files
+*.log
+*.tmp
+*~
+*.swp
+*.swo

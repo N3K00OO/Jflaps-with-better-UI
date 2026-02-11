@@ -11,10 +11,19 @@ import automata.pda.PDATransition;
 import automata.turing.TMState;
 import automata.turing.TMTransition;
 import automata.vdg.VDGTransition;
+import gui.environment.AutomatonEnvironment;
+import gui.environment.Environment;
+import gui.environment.EnvironmentFrame;
 import gui.viewer.AutomatonDrawer;
 import gui.viewer.AutomatonPane;
 import gui.viewer.SelectionDrawer;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.JComponent;
+import javax.swing.JOptionPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.Component;
@@ -27,6 +36,11 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
@@ -34,6 +48,8 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -42,7 +58,10 @@ import java.util.Queue;
 import java.util.Set;
 
 public final class AutomatonCopyPaste {
-  private static final String CLIP_PREFIX = "JFLAP_UI_SELECTION_V1:";
+  private static final String CLIP_PREFIX = "JFLAP_CLIP_v1\n";
+  private static final String LEGACY_PREFIX = "JFLAP_UI_SELECTION_V1:";
+  private static final String COPY_SUFFIX = "_copy";
+  private static final String COPYPASTE_BINDING_KEY = "launcher.modern.canvasCopyPasteBindings";
   private static final int PASTE_OFFSET_STEP = 24;
   private static final int PASTE_OFFSET_WRAP = 240;
 
@@ -63,6 +82,74 @@ public final class AutomatonCopyPaste {
     }
   }
 
+  public static void installCopyPasteBindings(final AutomatonPane pane) {
+    if (pane == null) {
+      return;
+    }
+
+    if (Boolean.TRUE.equals(pane.getClientProperty(COPYPASTE_BINDING_KEY))) {
+      return;
+    }
+    pane.putClientProperty(COPYPASTE_BINDING_KEY, Boolean.TRUE);
+
+    try {
+      pane.setFocusable(true);
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    try {
+      pane.addMouseListener(new MouseAdapter() {
+        @Override
+        public void mousePressed(MouseEvent e) {
+          pane.requestFocusInWindow();
+        }
+      });
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    int shortcutMask = menuShortcutMask();
+    int shortcutMaskEx = menuShortcutMaskEx();
+    KeyStroke copy = KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutMask);
+    KeyStroke copyEx = KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutMaskEx);
+    KeyStroke paste = KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMask);
+    KeyStroke pasteEx = KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMaskEx);
+
+    String copyKey = "launcher.canvasCopy";
+    String pasteKey = "launcher.canvasPaste";
+
+    InputMap inputMap = pane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+    ActionMap actionMap = pane.getActionMap();
+
+    if (actionMap.get(copyKey) == null) {
+      actionMap.put(copyKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (!delegateCopyPasteForTextFocus(false)) {
+            copyForActiveWindow();
+          }
+        }
+      });
+    }
+
+    if (actionMap.get(pasteKey) == null) {
+      actionMap.put(pasteKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (!delegateCopyPasteForTextFocus(true)) {
+            pasteForActiveWindow();
+          }
+        }
+      });
+    }
+
+    inputMap.put(copy, copyKey);
+    inputMap.put(copyEx, copyKey);
+    inputMap.put(paste, pasteKey);
+    inputMap.put(pasteEx, pasteKey);
+  }
+
   public static boolean tryCopyForActiveWindow() {
     Window window = activeWindow();
     if (window == null) {
@@ -74,30 +161,22 @@ public final class AutomatonCopyPaste {
       return false;
     }
 
-    SelectionDrawer selectionDrawer = selectionDrawer(pane);
-    if (selectionDrawer == null) {
-      return false;
-    }
-
-    Automaton automaton = selectionDrawer.getAutomaton();
+    Automaton automaton = automatonForPane(pane);
     if (automaton == null) {
       return false;
     }
 
-    State[] selected = selectionDrawer.getSelected();
-    if (selected == null || selected.length == 0) {
-      // Some tools may only select transitions; fall back to using endpoints.
-      Transition[] selectedTransitions;
-      try {
-        selectedTransitions = selectionDrawer.getSelectedTransitions();
-      } catch (Throwable ignored) {
-        selectedTransitions = null;
-      }
+    List<State> stateList = selectedStatesFromAutomaton(automaton);
 
-      if (selectedTransitions == null || selectedTransitions.length == 0) {
-        return false;
-      }
+    Transition[] selectedTransitions;
+    try {
+      selectedTransitions = selectedTransitionsFromAutomaton(automaton);
+    } catch (Throwable ignored) {
+      selectedTransitions = null;
+    }
 
+    boolean hasSelectedTransitions = selectedTransitions != null && selectedTransitions.length > 0;
+    if (stateList.isEmpty() && hasSelectedTransitions) {
       Set<State> stateSet = new HashSet<>();
       for (int i = 0; i < selectedTransitions.length; i++) {
         Transition t = selectedTransitions[i];
@@ -106,22 +185,24 @@ public final class AutomatonCopyPaste {
         }
         State from = t.getFromState();
         State to = t.getToState();
-        if (from != null) {
-          stateSet.add(from);
+        if (from != null && stateSet.add(from)) {
+          stateList.add(from);
         }
-        if (to != null) {
-          stateSet.add(to);
+        if (to != null && stateSet.add(to)) {
+          stateList.add(to);
         }
       }
-
-      if (stateSet.isEmpty()) {
-        return false;
-      }
-
-      selected = stateSet.toArray(new State[0]);
     }
 
-    SelectionSnapshot snapshot = SelectionSnapshot.fromSelection(automaton, selected);
+    if (stateList.isEmpty()) {
+      return false;
+    }
+
+    SelectionSnapshot snapshot = SelectionSnapshot.fromSelection(
+      automaton,
+      stateList.toArray(new State[0]),
+      hasSelectedTransitions ? selectedTransitions : null
+    );
     if (snapshot == null || snapshot.states.isEmpty()) {
       return false;
     }
@@ -145,18 +226,16 @@ public final class AutomatonCopyPaste {
       return false;
     }
 
-    final SelectionDrawer selectionDrawer = selectionDrawer(pane);
-    if (selectionDrawer == null) {
-      return false;
-    }
-
-    final Automaton automaton = selectionDrawer.getAutomaton();
+    final Automaton automaton = automatonForPane(pane);
     if (automaton == null) {
       return false;
     }
 
     String currentClass = automaton.getClass().getName();
     if (snapshot.automatonClassName != null && !snapshot.automatonClassName.equals(currentClass)) {
+      showPasteError(window,
+        "Clipboard contains a " + simpleName(snapshot.automatonClassName) +
+          " selection. Paste is only supported into " + simpleName(currentClass) + " editors.");
       return false;
     }
 
@@ -164,7 +243,7 @@ public final class AutomatonCopyPaste {
       @Override
       public void run() {
         pasteOffset = (pasteOffset + PASTE_OFFSET_STEP) % PASTE_OFFSET_WRAP;
-        pasteInto(snapshot, pane, selectionDrawer, automaton, pasteOffset);
+        pasteInto(snapshot, pane, selectionDrawer(pane), automaton, pasteOffset);
       }
     };
 
@@ -194,9 +273,13 @@ public final class AutomatonCopyPaste {
     int originX = anchor.x - (snapshot.boundsW / 2) + extraOffset;
     int originY = anchor.y - (snapshot.boundsH / 2) + extraOffset;
 
+    saveUndoStatus(automaton);
+    clearSelectedFlags(automaton);
+
     Map<Integer, State> idMap = new HashMap<>();
     List<Transition> newTransitions = new ArrayList<>();
     List<State> newStates = new ArrayList<>();
+    Set<String> usedLabels = collectUsedLabels(automaton);
 
     for (StateSnapshot s : snapshot.states) {
       Point p = new Point(originX + s.relX, originY + s.relY);
@@ -205,9 +288,10 @@ public final class AutomatonCopyPaste {
         continue;
       }
 
-      if (s.label != null) {
+      String newLabel = uniqueCopyLabel(labelBaseForState(s), usedLabels);
+      if (newLabel != null) {
         try {
-          created.setLabel(s.label);
+          created.setLabel(newLabel);
         } catch (Throwable ignored) {
           // best-effort only
         }
@@ -239,6 +323,11 @@ public final class AutomatonCopyPaste {
 
       idMap.put(s.id, created);
       newStates.add(created);
+      try {
+        created.setSelect(true);
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
     }
 
     for (TransitionSnapshot t : snapshot.transitions) {
@@ -264,19 +353,22 @@ public final class AutomatonCopyPaste {
       try {
         automaton.addTransition(created);
         newTransitions.add(created);
+        created.isSelected = true;
       } catch (Throwable ignored) {
         // best-effort only
       }
     }
 
     try {
-      selectionDrawer.clearSelected();
-      selectionDrawer.clearSelectedTransitions();
-      for (State s : newStates) {
-        selectionDrawer.addSelected(s);
-      }
-      for (Transition t : newTransitions) {
-        selectionDrawer.addSelected(t);
+      if (selectionDrawer != null) {
+        selectionDrawer.clearSelected();
+        selectionDrawer.clearSelectedTransitions();
+        for (State s : newStates) {
+          selectionDrawer.addSelected(s);
+        }
+        for (Transition t : newTransitions) {
+          selectionDrawer.addSelected(t);
+        }
       }
     } catch (Throwable ignored) {
       // best-effort only
@@ -367,6 +459,159 @@ public final class AutomatonCopyPaste {
     return new Point(60, 60);
   }
 
+  private static void saveUndoStatus(Automaton automaton) {
+    if (automaton == null) {
+      return;
+    }
+
+    try {
+      EnvironmentFrame frame = automaton.getEnvironmentFrame();
+      if (frame == null) {
+        return;
+      }
+      Environment env = frame.getEnvironment();
+      if (env instanceof AutomatonEnvironment) {
+        ((AutomatonEnvironment) env).saveStatus();
+      }
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static Set<String> collectUsedLabels(Automaton automaton) {
+    Set<String> used = new HashSet<>();
+    if (automaton == null) {
+      return used;
+    }
+
+    State[] states;
+    try {
+      states = automaton.getStates();
+    } catch (Throwable ignored) {
+      return used;
+    }
+
+    if (states == null) {
+      return used;
+    }
+
+    for (int i = 0; i < states.length; i++) {
+      State state = states[i];
+      if (state == null) {
+        continue;
+      }
+
+      String label = null;
+      try {
+        label = state.getLabel();
+      } catch (Throwable ignored) {
+        label = null;
+      }
+      addUsedLabel(used, safeTrim(label));
+
+      String name = null;
+      try {
+        name = state.getName();
+      } catch (Throwable ignored) {
+        name = null;
+      }
+      addUsedLabel(used, safeTrim(name));
+    }
+
+    return used;
+  }
+
+  private static void addUsedLabel(Set<String> used, String label) {
+    if (used == null || label == null || label.isEmpty()) {
+      return;
+    }
+    used.add(label);
+  }
+
+  private static String labelBaseForState(StateSnapshot snapshot) {
+    if (snapshot == null) {
+      return null;
+    }
+    String label = safeTrim(snapshot.label);
+    if (label != null) {
+      return label;
+    }
+    return "q" + snapshot.id;
+  }
+
+  private static String uniqueCopyLabel(String baseLabel, Set<String> usedLabels) {
+    if (baseLabel == null) {
+      return null;
+    }
+    String base = baseLabel.trim();
+    if (base.isEmpty()) {
+      return null;
+    }
+
+    int index = 1;
+    String candidate;
+    do {
+      candidate = base + COPY_SUFFIX + index;
+      index++;
+    } while (usedLabels != null && usedLabels.contains(candidate));
+
+    if (usedLabels != null) {
+      usedLabels.add(candidate);
+    }
+    return candidate;
+  }
+
+  private static String safeTrim(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static void showPasteError(final Window window, final String message) {
+    if (message == null) {
+      return;
+    }
+
+    Runnable action = new Runnable() {
+      @Override
+      public void run() {
+        JOptionPane.showMessageDialog(window, message, "Paste", JOptionPane.INFORMATION_MESSAGE);
+      }
+    };
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      action.run();
+    } else {
+      SwingUtilities.invokeLater(action);
+    }
+  }
+
+  private static String simpleName(String className) {
+    if (className == null) {
+      return "unknown";
+    }
+    int idx = className.lastIndexOf('.');
+    return (idx >= 0 && idx + 1 < className.length()) ? className.substring(idx + 1) : className;
+  }
+
+  private static int menuShortcutMask() {
+    try {
+      return Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
+    } catch (Throwable ignored) {
+      return InputEvent.CTRL_MASK;
+    }
+  }
+
+  private static int menuShortcutMaskEx() {
+    int mask = menuShortcutMask();
+    if ((mask & InputEvent.META_MASK) != 0) {
+      return InputEvent.META_DOWN_MASK;
+    }
+    return InputEvent.CTRL_DOWN_MASK;
+  }
+
   private static boolean writeSnapshotToClipboard(SelectionSnapshot snapshot) {
     Clipboard clipboard;
     try {
@@ -414,11 +659,19 @@ public final class AutomatonCopyPaste {
       return null;
     }
 
-    if (s == null || !s.startsWith(CLIP_PREFIX)) {
+    if (s == null) {
       return null;
     }
 
-    return decodeSnapshot(s.substring(CLIP_PREFIX.length()));
+    if (s.startsWith(CLIP_PREFIX)) {
+      return decodeSnapshot(s.substring(CLIP_PREFIX.length()));
+    }
+
+    if (s.startsWith(LEGACY_PREFIX)) {
+      return decodeSnapshot(s.substring(LEGACY_PREFIX.length()));
+    }
+
+    return null;
   }
 
   private static String encodeSnapshot(SelectionSnapshot snapshot) {
@@ -552,24 +805,150 @@ public final class AutomatonCopyPaste {
 
   private static boolean hasSelection(AutomatonPane pane) {
     SelectionDrawer sd = selectionDrawer(pane);
-    if (sd == null) {
+    if (sd != null) {
+      try {
+        State[] selected = sd.getSelected();
+        if (selected != null && selected.length > 0) {
+          return true;
+        }
+      } catch (Throwable ignored) {
+        // ignore
+      }
+
+      try {
+        Transition[] transitions = sd.getSelectedTransitions();
+        if (transitions != null && transitions.length > 0) {
+          return true;
+        }
+      } catch (Throwable ignored) {
+        // ignore
+      }
+    }
+
+    Automaton automaton = automatonForPane(pane);
+    if (automaton == null) {
       return false;
+    }
+    if (!selectedStatesFromAutomaton(automaton).isEmpty()) {
+      return true;
+    }
+    Transition[] transitions = selectedTransitionsFromAutomaton(automaton);
+    return transitions != null && transitions.length > 0;
+  }
+
+  private static Automaton automatonForPane(AutomatonPane pane) {
+    if (pane == null) {
+      return null;
     }
 
     try {
-      State[] selected = sd.getSelected();
-      if (selected != null && selected.length > 0) {
-        return true;
+      AutomatonDrawer drawer = pane.getDrawer();
+      if (drawer != null) {
+        return drawer.getAutomaton();
       }
     } catch (Throwable ignored) {
       // ignore
     }
+    return null;
+  }
 
+  private static List<State> selectedStatesFromAutomaton(Automaton automaton) {
+    List<State> selected = new ArrayList<>();
+    if (automaton == null) {
+      return selected;
+    }
+
+    State[] states;
     try {
-      Transition[] transitions = sd.getSelectedTransitions();
-      return transitions != null && transitions.length > 0;
+      states = automaton.getStates();
     } catch (Throwable ignored) {
-      return false;
+      return selected;
+    }
+
+    if (states == null) {
+      return selected;
+    }
+
+    for (int i = 0; i < states.length; i++) {
+      State s = states[i];
+      if (s != null && s.isSelected()) {
+        selected.add(s);
+      }
+    }
+
+    return selected;
+  }
+
+  private static Transition[] selectedTransitionsFromAutomaton(Automaton automaton) {
+    if (automaton == null) {
+      return null;
+    }
+
+    Transition[] transitions;
+    try {
+      transitions = automaton.getTransitions();
+    } catch (Throwable ignored) {
+      return null;
+    }
+
+    if (transitions == null || transitions.length == 0) {
+      return null;
+    }
+
+    List<Transition> selected = new ArrayList<>();
+    for (int i = 0; i < transitions.length; i++) {
+      Transition t = transitions[i];
+      if (t != null && t.isSelected) {
+        selected.add(t);
+      }
+    }
+
+    if (selected.isEmpty()) {
+      return null;
+    }
+
+    return selected.toArray(new Transition[0]);
+  }
+
+  private static void clearSelectedFlags(Automaton automaton) {
+    if (automaton == null) {
+      return;
+    }
+
+    State[] states;
+    try {
+      states = automaton.getStates();
+    } catch (Throwable ignored) {
+      states = null;
+    }
+
+    if (states != null) {
+      for (int i = 0; i < states.length; i++) {
+        State s = states[i];
+        if (s != null && s.isSelected()) {
+          try {
+            s.setSelect(false);
+          } catch (Throwable ignored) {
+            // ignore
+          }
+        }
+      }
+    }
+
+    Transition[] transitions;
+    try {
+      transitions = automaton.getTransitions();
+    } catch (Throwable ignored) {
+      transitions = null;
+    }
+
+    if (transitions != null) {
+      for (int i = 0; i < transitions.length; i++) {
+        Transition t = transitions[i];
+        if (t != null && t.isSelected) {
+          t.isSelected = false;
+        }
+      }
     }
   }
 
@@ -656,12 +1035,15 @@ public final class AutomatonCopyPaste {
       this.transitions = transitions;
     }
 
-    static SelectionSnapshot fromSelection(Automaton automaton, State[] selectedStates) {
+    static SelectionSnapshot fromSelection(Automaton automaton,
+                                           State[] selectedStates,
+                                           Transition[] selectedTransitions) {
       if (automaton == null || selectedStates == null || selectedStates.length == 0) {
         return null;
       }
 
       Set<State> selectedSet = new HashSet<>();
+      List<State> selectedList = new ArrayList<>();
       int minX = Integer.MAX_VALUE;
       int minY = Integer.MAX_VALUE;
       int maxX = Integer.MIN_VALUE;
@@ -672,7 +1054,10 @@ public final class AutomatonCopyPaste {
         if (s == null) {
           continue;
         }
-        selectedSet.add(s);
+        if (!selectedSet.add(s)) {
+          continue;
+        }
+        selectedList.add(s);
         Point p = s.getPoint();
         if (p == null) {
           continue;
@@ -701,8 +1086,24 @@ public final class AutomatonCopyPaste {
       MooreMachine moore = isMoore ? (MooreMachine) automaton : null;
 
       List<StateSnapshot> stateSnapshots = new ArrayList<>();
-      for (int i = 0; i < selectedStates.length; i++) {
-        State s = selectedStates[i];
+      Collections.sort(selectedList, new Comparator<State>() {
+        @Override
+        public int compare(State a, State b) {
+          if (a == b) {
+            return 0;
+          }
+          if (a == null) {
+            return -1;
+          }
+          if (b == null) {
+            return 1;
+          }
+          return a.getID() - b.getID();
+        }
+      });
+
+      for (int i = 0; i < selectedList.size(); i++) {
+        State s = selectedList.get(i);
         if (s == null) {
           continue;
         }
@@ -756,11 +1157,13 @@ public final class AutomatonCopyPaste {
       }
 
       List<TransitionSnapshot> transitionSnapshots = new ArrayList<>();
-      Transition[] transitions;
-      try {
-        transitions = automaton.getTransitions();
-      } catch (Throwable ignored) {
-        transitions = null;
+      Transition[] transitions = selectedTransitions;
+      if (transitions == null || transitions.length == 0) {
+        try {
+          transitions = automaton.getTransitions();
+        } catch (Throwable ignored) {
+          transitions = null;
+        }
       }
 
       if (transitions != null) {

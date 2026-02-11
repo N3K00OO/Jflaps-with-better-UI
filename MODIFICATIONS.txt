@@ -10,6 +10,7 @@ What changed:
 - Switched file open/save dialogs to the native OS file picker (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
 - Patched JFLAP's automaton canvas background fill to support custom canvas colors.
 - Patched JFLAP's transition labels/colors so they remain visible on dark canvases.
+- Added canvas copy/paste on editor canvases (Ctrl+C/Ctrl+V) with deterministic renaming on paste. Patch tag: canvas-copy-paste-v1.
 - Added runtime theming for toolbar icons and a visible delete cursor.
 - Fixed Pumping Lemma dark-mode readability (HTML panes follow theme; re-applied after updates) and enlarged the "Explain" area.
 - Added minimal `DOCS/` stubs (e.g. `DOCS/index.html`) so Help doesn't error in slim builds.
@@ -18,6 +19,7 @@ What changed:
 
 Changelog:
 - 2026-02-11: Updated documentation and increased Pumping Lemma "Explain" area height.
+- 2026-02-11: Added canvas copy/paste on editor canvases (Ctrl+C/Ctrl+V) with deterministic renaming on paste. Patch tag: canvas-copy-paste-v1.
 
 Contact for these modifications:
   egasudjali2@gmail.com
