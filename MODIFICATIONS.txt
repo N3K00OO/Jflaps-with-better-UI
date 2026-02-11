@@ -1,16 +1,23 @@
-﻿JFLAP 7.1 - Modern UI build (unofficial)
+JFLAP 7.1 - Modern UI build (unofficial)
 
 This file describes modifications made to the original JFLAP 7.1 distribution.
 The original JFLAP license text is included in this jar as `LICENSE`.
 
 What changed:
-- Added a launcher that uses FlatLaf for a more modern Swing UI.
+- Added a launcher that uses FlatLaf for a more modern Swing UI (Darcula default).
 - Added View > Theme switching (saved) and a Command Palette (Ctrl+K).
 - Added View > Customize Theme... (RGB accent/background/canvas overrides, saved).
-- Patched JFLAP''s automaton canvas background fill to support custom canvas colors.
-- Patched JFLAP''s transition labels/colors so they remain visible on dark canvases.
+- Switched file open/save dialogs to the native OS file picker (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
+- Patched JFLAP's automaton canvas background fill to support custom canvas colors.
+- Patched JFLAP's transition labels/colors so they remain visible on dark canvases.
 - Added runtime theming for toolbar icons and a visible delete cursor.
-- Switched file open/save dialogs to FlatLaf's native system file chooser where available.
+- Fixed Pumping Lemma dark-mode readability (HTML panes follow theme; re-applied after updates) and enlarged the "Explain" area.
+- Added minimal `DOCS/` stubs (e.g. `DOCS/index.html`) so Help doesn't error in slim builds.
+- Fixed a close-confirmation bug where clicking "Cancel" would still close the editor window.
+- Removed the legacy menu-bar close button artifact (extra "X").
+
+Changelog:
+- 2026-02-11: Updated documentation and increased Pumping Lemma "Explain" area height.
 
 Contact for these modifications:
   egasudjali2@gmail.com

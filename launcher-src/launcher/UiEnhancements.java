@@ -14,13 +14,25 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JRootPane;
+import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.KeyStroke;
+import javax.swing.RootPaneContainer;
+import javax.swing.text.JTextComponent;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.border.Border;
 import javax.swing.border.BevelBorder;
+import javax.swing.border.TitledBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.html.HTMLDocument;
+import javax.swing.text.html.StyleSheet;
 import java.awt.AWTEvent;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.AWTEventListener;
@@ -46,6 +58,8 @@ public final class UiEnhancements {
   private static final String MENUBAR_WATCHER_KEY = "launcher.modern.menuBarWatcher";
   private static final String MENUBAR_CLOSE_WATCHER_KEY = "launcher.modern.menuBarCloseWatcher";
   private static final String ENVFRAME_CLOSE_FIX_KEY = "launcher.modern.envFrameCloseFix";
+  private static final String READABILITY_TIMER_KEY = "launcher.modern.readabilityTimer";
+  private static final String HTML_READABILITY_KEY = "launcher.modern.htmlReadabilityHooked";
 
   private static volatile boolean installed = false;
 
@@ -62,28 +76,100 @@ public final class UiEnhancements {
       Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
         @Override
         public void eventDispatched(AWTEvent event) {
-          if (!(event instanceof WindowEvent)) {
-            return;
-          }
-
-          int id = event.getID();
-          if (id != WindowEvent.WINDOW_OPENED && id != WindowEvent.WINDOW_ACTIVATED) {
-            return;
-          }
-
-          final Window window = ((WindowEvent) event).getWindow();
-          if (window == null) {
-            return;
-          }
-
-          SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-              enhanceWindow(window);
+          if (event instanceof WindowEvent) {
+            int id = event.getID();
+            if (id != WindowEvent.WINDOW_OPENED && id != WindowEvent.WINDOW_ACTIVATED) {
+              return;
             }
-          });
+
+            final Window window = ((WindowEvent) event).getWindow();
+            if (window == null) {
+              return;
+            }
+
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                enhanceWindow(window);
+              }
+            });
+            return;
+          }
+
+          if (event instanceof ActionEvent) {
+            Object src = ((ActionEvent) event).getSource();
+            if (!(src instanceof Component)) {
+              return;
+            }
+
+            Component sourceComponent = (Component) src;
+            final Window window = (sourceComponent instanceof Window)
+              ? (Window) sourceComponent
+              : SwingUtilities.getWindowAncestor(sourceComponent);
+            if (window == null) {
+              return;
+            }
+
+            final JComponent marker = (window instanceof RootPaneContainer)
+              ? ((RootPaneContainer) window).getRootPane()
+              : null;
+
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                if (marker != null) {
+                  scheduleReadabilityFix(marker, window);
+                } else {
+                  applyReadabilityFixes(window);
+                }
+              }
+            });
+            return;
+          }
+
+          if (event instanceof ContainerEvent) {
+            if (event.getID() != ContainerEvent.COMPONENT_ADDED) {
+              return;
+            }
+
+            ContainerEvent ce = (ContainerEvent) event;
+            Component parent = ce.getContainer();
+            if (parent == null) {
+              return;
+            }
+
+            final Window window;
+            if (parent instanceof Window) {
+              window = (Window) parent;
+            } else {
+              window = SwingUtilities.getWindowAncestor(parent);
+            }
+            if (window == null) {
+              return;
+            }
+
+            final JComponent marker;
+            if (window instanceof RootPaneContainer) {
+              marker = ((RootPaneContainer) window).getRootPane();
+            } else {
+              marker = null;
+            }
+
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                // Some JFLAP panels set black HTML colors during/after they are added.
+                // Re-apply readability fixes shortly after any dynamic UI insertion.
+                if (marker != null) {
+                  scheduleReadabilityFix(marker, window);
+                } else {
+                  applyReadabilityFixes(window);
+                }
+              }
+            });
+          }
         }
-      }, AWTEvent.WINDOW_EVENT_MASK);
+      }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
     } catch (Throwable ignored) {
       // best-effort only
     }
@@ -119,6 +205,8 @@ public final class UiEnhancements {
       removeLegacyCloseButton(frame);
       modernizeBevelBorders(frame);
       AssetThemer.applyToWindow(frame);
+      applyReadabilityFixes(frame);
+      scheduleReadabilityFix(frame.getRootPane(), frame);
       return;
     }
 
@@ -127,6 +215,8 @@ public final class UiEnhancements {
       installCommandPaletteBinding(dialog.getRootPane());
       modernizeBevelBorders(dialog);
       AssetThemer.applyToWindow(dialog);
+      applyReadabilityFixes(dialog);
+      scheduleReadabilityFix(dialog.getRootPane(), dialog);
     }
   }
 
@@ -404,6 +494,450 @@ public final class UiEnhancements {
         }
       }
     }
+  }
+
+  /**
+   * JFLAP uses disabled {@code JEditorPane} controls to show HTML titles (e.g. pumping lemma chooser).
+   * Some of these panes explicitly set {@code setDisabledTextColor(Color.BLACK)}, which becomes unreadable on dark themes.
+   * This pass forces disabled HTML panes to use theme-appropriate text colors.
+   */
+  public static void applyReadabilityFixes(Component root) {
+    if (!(root instanceof Container)) {
+      return;
+    }
+
+    final Color defaultFg = bestEffortTextForeground();
+
+    Queue<Component> queue = new ArrayDeque<>();
+    queue.add(root);
+
+    while (!queue.isEmpty()) {
+      Component c = queue.remove();
+
+      if (c instanceof JComponent) {
+        tryEnlargePumpingLemmaExplain((JComponent) c);
+      }
+
+      if (c instanceof javax.swing.JEditorPane) {
+        javax.swing.JEditorPane pane = (javax.swing.JEditorPane) c;
+        try {
+          String contentType = pane.getContentType();
+          if (contentType != null && contentType.toLowerCase().contains("text/html")) {
+            Color bg = pane.getBackground();
+            if (bg == null) {
+              bg = UIManager.getColor("Panel.background");
+            }
+
+            // Make HTML respect component foreground/font so we can force readable text.
+            try {
+              pane.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+            } catch (Throwable ignored) {
+              // ignore
+            }
+
+            installHtmlReadabilityHooks(pane);
+
+            Color disabled = null;
+            try {
+              disabled = pane.getDisabledTextColor();
+            } catch (Throwable ignored) {
+              disabled = null;
+            }
+
+            // Only override if it's currently low-contrast (or explicitly black on a dark background).
+            if (isLowContrast(disabled, bg) || (isVeryDark(disabled) && isDark(bg))) {
+              pane.setDisabledTextColor(defaultFg);
+            }
+
+            // Some LAFs/HTML renderers use foreground even when disabled.
+            if (isLowContrast(pane.getForeground(), bg)) {
+              pane.setForeground(defaultFg);
+            }
+
+            // Some HTML kits default text to black regardless of disabledTextColor/foreground.
+            // Force the document stylesheet to use the current theme foreground.
+            try {
+              if (pane.getDocument() instanceof HTMLDocument) {
+                HTMLDocument doc = (HTMLDocument) pane.getDocument();
+                StyleSheet ss = doc.getStyleSheet();
+                if (ss != null) {
+                  String css = toCssColor(defaultFg);
+                  ss.addRule("body { color: " + css + " !important; }");
+                  ss.addRule("* { color: " + css + " !important; }");
+                }
+              }
+            } catch (Throwable ignored) {
+              // best-effort only
+            }
+
+            try {
+              pane.revalidate();
+              pane.repaint();
+            } catch (Throwable ignored) {
+              // ignore
+            }
+
+            // If someone set the pane disabled just to prevent editing, keep it readable.
+            // (Don't change enabled state here; it can affect focus/keyboard behavior.)
+          }
+        } catch (Throwable ignored) {
+          // best-effort only
+        }
+      } else if (c instanceof JTextComponent) {
+        // Keep disabled text readable in dark themes (e.g. read-only fields).
+        JTextComponent tc = (JTextComponent) c;
+        try {
+          Color bg = tc.getBackground();
+          if (bg == null) {
+            bg = UIManager.getColor("TextField.background");
+          }
+          if (!tc.isEnabled()) {
+            Color disabled = tc.getDisabledTextColor();
+            if (isLowContrast(disabled, bg)) {
+              tc.setDisabledTextColor(defaultFg);
+            }
+          }
+        } catch (Throwable ignored) {
+          // ignore
+        }
+      }
+
+      if (c instanceof Container) {
+        Component[] children;
+        try {
+          children = ((Container) c).getComponents();
+        } catch (Throwable ignored) {
+          children = null;
+        }
+
+        if (children != null) {
+          for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+              queue.add(children[i]);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private static void installHtmlReadabilityHooks(final javax.swing.JEditorPane pane) {
+    if (pane == null) {
+      return;
+    }
+    if (Boolean.TRUE.equals(pane.getClientProperty(HTML_READABILITY_KEY))) {
+      return;
+    }
+    pane.putClientProperty(HTML_READABILITY_KEY, Boolean.TRUE);
+
+    try {
+      pane.addPropertyChangeListener(new PropertyChangeListener() {
+        @Override
+        public void propertyChange(PropertyChangeEvent evt) {
+          String name = (evt == null) ? null : evt.getPropertyName();
+          if (name == null) {
+            return;
+          }
+          if ("document".equals(name) || "text".equals(name) || "enabled".equals(name)) {
+            // Apply after the update so we see the final document/text.
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                applyReadabilityFixes(pane);
+              }
+            });
+          }
+        }
+      });
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+
+    try {
+      if (pane.getDocument() != null) {
+        pane.getDocument().addDocumentListener(new DocumentListener() {
+          @Override
+          public void insertUpdate(DocumentEvent e) {
+            reapplySoon();
+          }
+
+          @Override
+          public void removeUpdate(DocumentEvent e) {
+            reapplySoon();
+          }
+
+          @Override
+          public void changedUpdate(DocumentEvent e) {
+            reapplySoon();
+          }
+
+          private void reapplySoon() {
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                applyReadabilityFixes(pane);
+              }
+            });
+          }
+        });
+      }
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static void scheduleReadabilityFix(JComponent marker, final Component target) {
+    if (marker == null || target == null) {
+      return;
+    }
+
+    Object existing = marker.getClientProperty(READABILITY_TIMER_KEY);
+    if (existing instanceof javax.swing.Timer) {
+      try {
+        ((javax.swing.Timer) existing).restart();
+      } catch (Throwable ignored) {
+        // ignore
+      }
+      return;
+    }
+
+    try {
+      // Some JFLAP panes (including pumping lemma chooser panes) set their colors during/after show.
+      // Re-apply our readability fix shortly after the window becomes visible.
+      javax.swing.Timer t = new javax.swing.Timer(250, new java.awt.event.ActionListener() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          try {
+            applyReadabilityFixes(target);
+          } catch (Throwable ignored) {
+            // ignore
+          }
+        }
+      });
+      t.setRepeats(false);
+      marker.putClientProperty(READABILITY_TIMER_KEY, t);
+      t.start();
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static Color bestEffortTextForeground() {
+    Color fg = UIManager.getColor("Label.foreground");
+    if (fg != null) {
+      return fg;
+    }
+    fg = UIManager.getColor("TextField.foreground");
+    if (fg != null) {
+      return fg;
+    }
+    // Reasonable default for dark-ish themes.
+    return new Color(0xEDEDED);
+  }
+
+  private static boolean isLowContrast(Color fg, Color bg) {
+    if (fg == null || bg == null) {
+      return false;
+    }
+    return contrastRatio(fg, bg) < 3.0;
+  }
+
+  private static boolean isDark(Color c) {
+    if (c == null) {
+      return false;
+    }
+    double r = c.getRed() / 255.0;
+    double g = c.getGreen() / 255.0;
+    double b = c.getBlue() / 255.0;
+    double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return lum < 0.5;
+  }
+
+  private static boolean isVeryDark(Color c) {
+    if (c == null) {
+      return false;
+    }
+    return c.getRed() < 40 && c.getGreen() < 40 && c.getBlue() < 40;
+  }
+
+  private static double contrastRatio(Color a, Color b) {
+    double la = relativeLuminance(a);
+    double lb = relativeLuminance(b);
+    double light = Math.max(la, lb);
+    double dark = Math.min(la, lb);
+    return (light + 0.05) / (dark + 0.05);
+  }
+
+  private static double relativeLuminance(Color c) {
+    if (c == null) {
+      return 0.0;
+    }
+    double r = srgbToLinear(c.getRed() / 255.0);
+    double g = srgbToLinear(c.getGreen() / 255.0);
+    double b = srgbToLinear(c.getBlue() / 255.0);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  private static double srgbToLinear(double v) {
+    if (v <= 0.04045) {
+      return v / 12.92;
+    }
+    return Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static String toCssColor(Color c) {
+    if (c == null) {
+      return "#ffffff";
+    }
+    return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
+  }
+
+  private static void tryEnlargePumpingLemmaExplain(JComponent c) {
+    if (c == null) {
+      return;
+    }
+
+    Border border;
+    try {
+      border = c.getBorder();
+    } catch (Throwable ignored) {
+      border = null;
+    }
+
+    if (!(border instanceof TitledBorder)) {
+      return;
+    }
+
+    String title;
+    try {
+      title = ((TitledBorder) border).getTitle();
+    } catch (Throwable ignored) {
+      title = null;
+    }
+
+    if (title == null || !title.trim().startsWith("Objective")) {
+      return;
+    }
+
+    // This is the PumpingLemmaInputPane "Objective:" panel (contains Clear All, Explain, and a small HTML JTextPane).
+    JScrollPane scroll = findHtmlTextScrollPane(c);
+    if (scroll == null) {
+      return;
+    }
+
+    Component view = null;
+    try {
+      if (scroll.getViewport() != null) {
+        view = scroll.getViewport().getView();
+      }
+    } catch (Throwable ignored) {
+      view = null;
+    }
+
+    if (!(view instanceof JTextComponent)) {
+      return;
+    }
+
+    int lineHeight;
+    try {
+      lineHeight = view.getFontMetrics(view.getFont()).getHeight();
+    } catch (Throwable ignored) {
+      lineHeight = 16;
+    }
+
+    Dimension scrollPref = safeDim(scroll.getPreferredSize(), 220, 28);
+    Dimension panelPref = safeDim(c.getPreferredSize(), 640, 58);
+    Dimension panelMax = safeDim(c.getMaximumSize(), panelPref.width, panelPref.height);
+
+    // Give the explanation text area enough height to be readable at common DPI scales.
+    int desiredScrollHeight = Math.max(scrollPref.height, lineHeight * 5 + 12);
+
+    // Keep the panel's original overhead (border + FlowLayout gaps + button height), but allow more room for the text pane.
+    int overhead = Math.max(0, panelPref.height - scrollPref.height);
+    int desiredPanelHeight = Math.max(panelPref.height, desiredScrollHeight + overhead);
+
+    // Apply sizes (idempotent).
+    try {
+      scroll.setPreferredSize(new Dimension(scrollPref.width, desiredScrollHeight));
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    try {
+      Dimension scrollMax = safeDim(scroll.getMaximumSize(), scrollPref.width, desiredScrollHeight);
+      scroll.setMaximumSize(new Dimension(scrollMax.width, Math.max(scrollMax.height, desiredScrollHeight)));
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    try {
+      c.setPreferredSize(new Dimension(panelPref.width, desiredPanelHeight));
+      c.setMaximumSize(new Dimension(panelMax.width, Math.max(panelMax.height, desiredPanelHeight)));
+      // Don't force a minimum; let layouts shrink if necessary.
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    if (desiredScrollHeight != scrollPref.height || desiredPanelHeight != panelPref.height) {
+      try {
+        c.revalidate();
+        c.repaint();
+      } catch (Throwable ignored) {
+        // ignore
+      }
+    }
+  }
+
+  private static JScrollPane findHtmlTextScrollPane(Container root) {
+    if (root == null) {
+      return null;
+    }
+
+    Queue<Component> queue = new ArrayDeque<>();
+    queue.add(root);
+
+    while (!queue.isEmpty()) {
+      Component c = queue.remove();
+      if (c instanceof JScrollPane) {
+        JScrollPane sp = (JScrollPane) c;
+        try {
+          Component view = (sp.getViewport() == null) ? null : sp.getViewport().getView();
+          if (view instanceof javax.swing.JEditorPane) {
+            javax.swing.JEditorPane ep = (javax.swing.JEditorPane) view;
+            String ct = ep.getContentType();
+            if (ct != null && ct.toLowerCase().contains("text/html")) {
+              return sp;
+            }
+          }
+        } catch (Throwable ignored) {
+          // ignore
+        }
+      }
+
+      if (c instanceof Container) {
+        Component[] children;
+        try {
+          children = ((Container) c).getComponents();
+        } catch (Throwable ignored) {
+          children = null;
+        }
+        if (children != null) {
+          for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+              queue.add(children[i]);
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private static Dimension safeDim(Dimension d, int fallbackW, int fallbackH) {
+    int w = (d == null || d.width <= 0) ? fallbackW : d.width;
+    int h = (d == null || d.height <= 0) ? fallbackH : d.height;
+    return new Dimension(w, h);
   }
 
   private static boolean removeByClassName(java.awt.Container root, String className) {

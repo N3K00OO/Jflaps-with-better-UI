@@ -1,26 +1,28 @@
 # JFLAP 7.1 Better UI (Unofficial)
 
-This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by wrapping it with a small launcher (Swing + FlatLaf) and applying a couple of tiny runtime/bytecode tweaks for readability.
+This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by wrapping it with a small launcher (Swing + FlatLaf) and applying a few runtime/bytecode tweaks for dark-mode readability.
 
-The primary distributable in this folder is:
+The primary distributables in this folder are:
 
-- `JFLAP7.1-better-ui.jar`
+- `JFLAP7.1.1-better-ui.jar` (slim build)
+- `JFLAP7.1.1-better-ui-fat.jar` (optional, build with `-Fat`)
 
 ## Run
 
 ```bash
-java -jar JFLAP7.1-better-ui.jar
+java -jar JFLAP7.1.1-better-ui.jar
 ```
 
 Launcher options:
 
 ```bash
-java -jar JFLAP7.1-better-ui.jar --help
+java -jar JFLAP7.1.1-better-ui.jar --help
 ```
 
 - `--theme=light|dark|intellij|darcula`
 - `--uiScale=<number>` (example: `--uiScale=1.25`)
 - Short flags: `--light`, `--dark`, `--intellij`, `--darcula`
+- `--selftest` (diagnose crashes / UI creation)
 - Also supported: `-Djflap.theme=<theme>` or env var `JFLAP_THEME=<theme>`
 
 ## What Changed
@@ -31,22 +33,38 @@ java -jar JFLAP7.1-better-ui.jar --help
   - Accent color
   - App background
   - Canvas background (optional checkbox)
+  - Tip: you can also paste/type a hex color like `#1e1e1e`
 - `Ctrl+K`: Command Palette for quick actions.
+- Removes the legacy menu-bar close button artifact (extra "X"); use the normal window close button or `File > Close`.
+- Fixes a close-confirmation bug where clicking "Cancel" would still close the editor window.
+- File dialogs: uses the native OS Open/Save dialog (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
 - Canvas dark-mode fixes:
   - Transition arrows/labels stay visible on dark canvases.
   - Delete tool cursor is forced to a visible crosshair.
 - Toolbar icons are recolored at runtime to match the current theme.
+- Pumping Lemma readability fixes:
+  - HTML panes stay readable on dark themes (no need to toggle the theme).
+  - The "Explain" text area is taller so it doesn't clip as easily at higher UI scale.
+- Help pages: ships minimal `DOCS/` stubs so Help doesn't error in the slim build.
 
 ## Command Palette
 
 Open it with `Ctrl+K` (or `Cmd+K` on macOS) or via `View > Command Palette...`.
 
-- Type to search actions from the current window’s menu bar (shows the full path like `File > Open...`).
-- Use ↑/↓ to select, `Enter` to run, `Esc` to close.
+- Type to search actions from the current window's menu bar (shows the full path like `File > Open...`).
+- Use Up/Down arrows to select, `Enter` to run, `Esc` to close.
+
+## Changelog
+
+### 2026-02-11
+
+- Pumping Lemma: fixed dark-mode text + enlarged the "Explain" area.
+- Help: added minimal `DOCS/` stubs to avoid missing-doc popups in slim builds.
+- Build: slim jar by default; `-Fat` keeps the full reference contents.
 
 ## Screenshots
 
-Dark canvas :
+Dark canvas:
 
 ![Dark canvas arrow visibility](assets/dark-canvas-arrow.png)
 
@@ -62,7 +80,7 @@ Example dialog styling (dark):
 
 ![Dialog styling (dark)](assets/new-dialog-dark.png)
 
-View menu :
+View menu:
 
 ![View menu (light)](assets/view-menu-light.png)
 
@@ -86,10 +104,21 @@ Requirements:
 - Internet access on first run (downloads FlatLaf + ASM to `deps/`)
 
 ```powershell
-powershell -File .\build-modern.ps1 -InputJar .\JFLAP7.1.jar -OutputJar .\JFLAP7.1-better-ui.jar
+.\build.ps1
 ```
 
-## License / Redistribution Notes 
+Fat build (keeps full reference jar contents):
+
+```powershell
+.\build.ps1 -Fat
+```
+
+Slim build notes:
+
+- By default the build prunes dev-only content from the output jar (e.g. `.git/`, `assets/`, `DOCS/`, `README*`).
+- Use `.\build.ps1 -Fat` to keep everything from the reference jar.
+
+## License / Redistribution Notes
 
 Per the **JFLAP 7.1** license, distributing modified copies requires (at minimum):
 
@@ -107,16 +136,3 @@ This build includes:
 - Convenience copies of both licenses in `licenses/`
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
-========================================================================================================
-
-TODO:
-
-1. ~release the build script Tommorow~ (Done)
-2. More Ui fixes and improvements (next week or so (again))
-
-## Bug fixes and features on this version:
-
-* Fixed a critical bug where if you clicked close --> cancel ---> it closes the jflap
-* switch to the modern save/open file explorer windows api
-* made deleter visible regardless of background
-* polished ui and remove an old "Ghost close button "

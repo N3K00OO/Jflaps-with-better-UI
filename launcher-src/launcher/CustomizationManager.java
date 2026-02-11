@@ -2,6 +2,7 @@ package launcher;
 
 import com.formdev.flatlaf.FlatLaf;
 
+import java.awt.Color;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.prefs.Preferences;
@@ -33,7 +34,46 @@ public final class CustomizationManager {
 
     String background = get(KEY_BACKGROUND);
     if (!isBlank(background)) {
-      extra.put("@background", background.trim());
+      String bgHex = normalizeHexColor(background);
+      extra.put("@background", bgHex);
+
+      // If the user overrides only the background color (especially to very dark/very light),
+      // built-in themes can end up with low-contrast text because @foreground remains unchanged.
+      // Keep UI readable by deriving a matching foreground and a few core component colors.
+      Color bg = parseHexColor(bgHex);
+      if (bg != null) {
+        boolean dark = isDark(bg);
+        Color fg = dark ? new Color(0xEDEDED) : new Color(0x202020);
+        Color disabledFg = dark ? new Color(0xA0A0A0) : new Color(0x808080);
+
+        extra.put("@foreground", toHex(fg));
+
+        // Use explicit component colors for robustness (some components don't exclusively rely on @foreground).
+        extra.put("Label.foreground", toHex(fg));
+        extra.put("Button.foreground", toHex(fg));
+        extra.put("Menu.foreground", toHex(fg));
+        extra.put("MenuItem.foreground", toHex(fg));
+        extra.put("CheckBox.foreground", toHex(fg));
+        extra.put("RadioButton.foreground", toHex(fg));
+        extra.put("TextField.foreground", toHex(fg));
+        extra.put("TextArea.foreground", toHex(fg));
+        extra.put("TextPane.foreground", toHex(fg));
+        extra.put("FormattedTextField.foreground", toHex(fg));
+
+        extra.put("Label.disabledForeground", toHex(disabledFg));
+        extra.put("Button.disabledText", toHex(disabledFg));
+        extra.put("Menu.disabledForeground", toHex(disabledFg));
+        extra.put("MenuItem.disabledForeground", toHex(disabledFg));
+
+        // Ensure buttons remain visually distinct from the window background.
+        Color buttonBg = dark ? blend(bg, Color.WHITE, 0.12f) : blend(bg, Color.BLACK, 0.06f);
+        Color buttonHoverBg = dark ? blend(bg, Color.WHITE, 0.18f) : blend(bg, Color.BLACK, 0.10f);
+        Color buttonPressedBg = dark ? blend(bg, Color.WHITE, 0.08f) : blend(bg, Color.BLACK, 0.14f);
+
+        extra.put("Button.background", toHex(buttonBg));
+        extra.put("Button.hoverBackground", toHex(buttonHoverBg));
+        extra.put("Button.pressedBackground", toHex(buttonPressedBg));
+      }
     }
 
     return extra;
@@ -115,5 +155,60 @@ public final class CustomizationManager {
       return trimmed;
     }
     return "#" + trimmed;
+  }
+
+  private static Color parseHexColor(String value) {
+    if (isBlank(value)) {
+      return null;
+    }
+    String v = value.trim();
+    try {
+      return Color.decode(v);
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
+  }
+
+  private static boolean isDark(Color c) {
+    if (c == null) {
+      return false;
+    }
+    double r = c.getRed() / 255.0;
+    double g = c.getGreen() / 255.0;
+    double b = c.getBlue() / 255.0;
+    // Relative luminance (rough sRGB).
+    double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return lum < 0.5;
+  }
+
+  private static Color blend(Color base, Color over, float overAlpha) {
+    if (base == null) {
+      return over;
+    }
+    if (over == null) {
+      return base;
+    }
+    float a = Math.max(0f, Math.min(1f, overAlpha));
+    int r = clamp(Math.round(base.getRed() * (1f - a) + over.getRed() * a));
+    int g = clamp(Math.round(base.getGreen() * (1f - a) + over.getGreen() * a));
+    int b = clamp(Math.round(base.getBlue() * (1f - a) + over.getBlue() * a));
+    return new Color(r, g, b);
+  }
+
+  private static int clamp(int v) {
+    if (v < 0) {
+      return 0;
+    }
+    if (v > 255) {
+      return 255;
+    }
+    return v;
+  }
+
+  private static String toHex(Color c) {
+    if (c == null) {
+      return null;
+    }
+    return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
   }
 }
