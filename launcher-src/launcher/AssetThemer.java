@@ -15,6 +15,9 @@ import java.awt.Image;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.util.Map;
@@ -22,6 +25,7 @@ import java.util.Map;
 public final class AssetThemer {
   private static final String ORIG_ICON_KEY = "launcher.modern.origIcon";
   private static final String DELETE_HOOK_KEY = "launcher.modern.deleteCursorHooked";
+  private static volatile Cursor deleteToolCursor;
 
   private AssetThemer() {
   }
@@ -133,18 +137,129 @@ public final class AssetThemer {
         }
         button.putClientProperty(DELETE_HOOK_KEY, Boolean.TRUE);
 
+        installDeleteCursorEnforcer(button, view);
+
         button.addActionListener(new ActionListener() {
           @Override
           public void actionPerformed(ActionEvent e) {
             if (!button.isSelected()) {
               return;
             }
-            view.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+
+            // ToolBar sets its own (often hard-to-see) delete cursor inside its actionPerformed.
+            // Override it after ToolBar runs, and keep overriding on mouse move.
+            SwingUtilities.invokeLater(new Runnable() {
+              @Override
+              public void run() {
+                applyDeleteCursorIfSelected(button, view);
+              }
+            });
           }
         });
       }
     } catch (Throwable ignored) {
       // best-effort only
+    }
+  }
+
+  private static void installDeleteCursorEnforcer(final AbstractButton deleteButton, final Component view) {
+    if (deleteButton == null || view == null) {
+      return;
+    }
+
+    try {
+      // Re-apply the cursor on mouse activity because some components reset cursors on enter/move.
+      view.addMouseMotionListener(new MouseMotionAdapter() {
+        @Override
+        public void mouseMoved(MouseEvent e) {
+          applyDeleteCursorIfSelected(deleteButton, view);
+        }
+
+        @Override
+        public void mouseDragged(MouseEvent e) {
+          applyDeleteCursorIfSelected(deleteButton, view);
+        }
+      });
+
+      view.addMouseListener(new MouseAdapter() {
+        @Override
+        public void mouseEntered(MouseEvent e) {
+          applyDeleteCursorIfSelected(deleteButton, view);
+        }
+      });
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static void applyDeleteCursorIfSelected(AbstractButton deleteButton, Component view) {
+    if (deleteButton == null || view == null) {
+      return;
+    }
+    try {
+      if (!deleteButton.isSelected()) {
+        return;
+      }
+    } catch (Throwable ignored) {
+      return;
+    }
+
+    Cursor c = highContrastCrosshairCursor();
+    if (c == null) {
+      c = Cursor.getDefaultCursor();
+    }
+
+    try {
+      view.setCursor(c);
+    } catch (Throwable ignored) {
+      // ignore
+    }
+  }
+
+  private static Cursor highContrastCrosshairCursor() {
+    if (deleteToolCursor != null) {
+      return deleteToolCursor;
+    }
+
+    try {
+      java.awt.Toolkit toolkit = java.awt.Toolkit.getDefaultToolkit();
+      java.awt.Dimension best = toolkit.getBestCursorSize(32, 32);
+      int w = (best == null || best.width <= 0) ? 32 : best.width;
+      int h = (best == null || best.height <= 0) ? 32 : best.height;
+
+      BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+      Graphics2D g = image.createGraphics();
+      try {
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL, java.awt.RenderingHints.VALUE_STROKE_PURE);
+
+        int cx = w / 2;
+        int cy = h / 2;
+
+        // Draw a thick black outline, then a white crosshair, then a red center dot.
+        g.setStroke(new java.awt.BasicStroke(3f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+        g.setColor(new Color(0, 0, 0, 230));
+        g.drawLine(cx - 11, cy, cx + 11, cy);
+        g.drawLine(cx, cy - 11, cx, cy + 11);
+        g.drawOval(cx - 5, cy - 5, 10, 10);
+
+        g.setStroke(new java.awt.BasicStroke(1.6f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+        g.setColor(new Color(255, 255, 255, 255));
+        g.drawLine(cx - 10, cy, cx + 10, cy);
+        g.drawLine(cx, cy - 10, cx, cy + 10);
+        g.drawOval(cx - 4, cy - 4, 8, 8);
+
+        g.setStroke(new java.awt.BasicStroke(1f));
+        g.setColor(new Color(255, 60, 60, 255));
+        g.fillOval(cx - 1, cy - 1, 3, 3);
+      } finally {
+        g.dispose();
+      }
+
+      deleteToolCursor = toolkit.createCustomCursor(image, new java.awt.Point(w / 2, h / 2), "jflap-delete");
+      return deleteToolCursor;
+    } catch (Throwable ignored) {
+      return null;
     }
   }
 
@@ -232,4 +347,3 @@ public final class AssetThemer {
     return nonBlackish == 0;
   }
 }
-

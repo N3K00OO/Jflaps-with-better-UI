@@ -10,6 +10,7 @@ What changed:
 - Patched JFLAP''s automaton canvas background fill to support custom canvas colors.
 - Patched JFLAP''s transition labels/colors so they remain visible on dark canvases.
 - Added runtime theming for toolbar icons and a visible delete cursor.
+- Switched file open/save dialogs to FlatLaf's native system file chooser where available.
 
 Contact for these modifications:
   egasudjali2@gmail.com

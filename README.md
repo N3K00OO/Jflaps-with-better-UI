@@ -89,7 +89,7 @@ Requirements:
 powershell -File .\build-modern.ps1 -InputJar .\JFLAP7.1.jar -OutputJar .\JFLAP7.1-better-ui.jar
 ```
 
-## License / Redistribution Notes (Not Legal Advice)
+## License / Redistribution Notes 
 
 Per the **JFLAP 7.1** license, distributing modified copies requires (at minimum):
 
@@ -112,4 +112,11 @@ Disclaimer: This is not an official JFLAP release and is not endorsed by the ori
 TODO:
 
 1. ~release the build script Tommorow~ (Done)
-2. More Ui fixes and improvements (next week or so)
+2. More Ui fixes and improvements (next week or so (again))
+
+## Bug fixes and features on this version:
+
+* Fixed a critical bug where if you clicked close --> cancel ---> it closes the jflap
+* switch to the modern save/open file explorer windows api
+* made deleter visible regardless of background
+* polished ui and remove an old "Ghost close button "

@@ -4,30 +4,48 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.ButtonGroup;
+import javax.swing.BorderFactory;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JRootPane;
 import javax.swing.JSeparator;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.border.BevelBorder;
 import java.awt.AWTEvent;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
+import java.awt.event.ContainerAdapter;
+import java.awt.event.ContainerEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.lang.reflect.Method;
+import java.util.ArrayDeque;
+import java.util.Queue;
 
 public final class UiEnhancements {
   private static final String MENU_INJECTED_KEY = "launcher.modern.viewMenuInjected";
   private static final String HELP_INJECTED_KEY = "launcher.modern.helpMenuInjected";
   private static final String ROOTPANE_BINDING_KEY = "launcher.modern.commandPaletteBinding";
+  private static final String MENUBAR_WATCHER_KEY = "launcher.modern.menuBarWatcher";
+  private static final String MENUBAR_CLOSE_WATCHER_KEY = "launcher.modern.menuBarCloseWatcher";
+  private static final String ENVFRAME_CLOSE_FIX_KEY = "launcher.modern.envFrameCloseFix";
 
   private static volatile boolean installed = false;
 
@@ -94,8 +112,12 @@ public final class UiEnhancements {
     if (window instanceof JFrame) {
       JFrame frame = (JFrame) window;
       installCommandPaletteBinding(frame.getRootPane());
+      installEnvironmentFrameCloseFix(frame);
       injectViewMenu(frame);
       injectHelpMenu(frame);
+      installMenuBarWatcher(frame);
+      removeLegacyCloseButton(frame);
+      modernizeBevelBorders(frame);
       AssetThemer.applyToWindow(frame);
       return;
     }
@@ -103,8 +125,333 @@ public final class UiEnhancements {
     if (window instanceof javax.swing.JDialog) {
       javax.swing.JDialog dialog = (javax.swing.JDialog) window;
       installCommandPaletteBinding(dialog.getRootPane());
+      modernizeBevelBorders(dialog);
       AssetThemer.applyToWindow(dialog);
     }
+  }
+
+  private static void installMenuBarWatcher(final JFrame frame) {
+    if (frame == null) {
+      return;
+    }
+
+    JRootPane rootPane = frame.getRootPane();
+    if (rootPane == null) {
+      return;
+    }
+
+    if (Boolean.TRUE.equals(rootPane.getClientProperty(MENUBAR_WATCHER_KEY))) {
+      return;
+    }
+    rootPane.putClientProperty(MENUBAR_WATCHER_KEY, Boolean.TRUE);
+
+    try {
+      frame.addPropertyChangeListener(new PropertyChangeListener() {
+        @Override
+        public void propertyChange(PropertyChangeEvent evt) {
+          if (evt == null) {
+            return;
+          }
+          String name = evt.getPropertyName();
+          if (name == null) {
+            return;
+          }
+
+          // JFrame uses "JMenuBar" as the property name, but accept a few variants defensively.
+          if ("JMenuBar".equals(name) || "menuBar".equalsIgnoreCase(name)) {
+            removeLegacyCloseButton(frame);
+          }
+        }
+      });
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static void installEnvironmentFrameCloseFix(final JFrame frame) {
+    if (frame == null) {
+      return;
+    }
+
+    // Only patch JFLAP environment windows.
+    if (!"gui.environment.EnvironmentFrame".equals(frame.getClass().getName())) {
+      return;
+    }
+
+    JRootPane rootPane = frame.getRootPane();
+    if (rootPane == null) {
+      return;
+    }
+
+    if (Boolean.TRUE.equals(rootPane.getClientProperty(ENVFRAME_CLOSE_FIX_KEY))) {
+      return;
+    }
+    rootPane.putClientProperty(ENVFRAME_CLOSE_FIX_KEY, Boolean.TRUE);
+
+    try {
+      frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    // Remove JFLAP's listener that calls EnvironmentFrame.close(), which closes even if "Save As" is cancelled.
+    try {
+      WindowListener[] listeners = frame.getWindowListeners();
+      for (int i = 0; listeners != null && i < listeners.length; i++) {
+        WindowListener wl = listeners[i];
+        if (wl == null) {
+          continue;
+        }
+        if ("gui.environment.EnvironmentFrame$Listener".equals(wl.getClass().getName())) {
+          try {
+            frame.removeWindowListener(wl);
+          } catch (Throwable ignored) {
+            // ignore
+          }
+        }
+      }
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    // Install our fixed close handler.
+    try {
+      frame.addWindowListener(new WindowAdapter() {
+        @Override
+        public void windowClosing(WindowEvent e) {
+          fixedCloseEnvironmentFrame(frame);
+        }
+      });
+    } catch (Throwable ignored) {
+      // ignore
+    }
+  }
+
+  private static void fixedCloseEnvironmentFrame(JFrame frame) {
+    if (frame == null) {
+      return;
+    }
+
+    try {
+      Object env = invokeNoArg(frame, "getEnvironment");
+      boolean dirty = toBoolean(invokeNoArg(env, "isDirty"));
+
+      if (dirty) {
+        File file = (File) invokeNoArg(env, "getFile");
+        String name = (file == null) ? "untitled" : file.getName();
+
+        int choice = JOptionPane.showConfirmDialog(
+          frame,
+          "Save " + name + " before closing?"
+        );
+
+        if (choice == JOptionPane.CANCEL_OPTION || choice == JOptionPane.CLOSED_OPTION) {
+          return;
+        }
+
+        if (choice == JOptionPane.YES_OPTION) {
+          boolean saved = toBoolean(invoke(frame, "save", new Class<?>[] {boolean.class}, new Object[] {Boolean.FALSE}));
+          if (!saved) {
+            // User cancelled Save/Save As dialog or save failed.
+            return;
+          }
+        }
+      }
+
+      // Dispose + unregister.
+      try {
+        frame.dispose();
+      } catch (Throwable ignored) {
+        // ignore
+      }
+
+      try {
+        Class<?> universe = Class.forName("gui.environment.Universe");
+        Method unregister = universe.getMethod("unregisterFrame", Class.forName("gui.environment.EnvironmentFrame"));
+        unregister.invoke(null, frame);
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    } catch (Throwable ignored) {
+      // If anything goes wrong, fall back to JFLAP's original close() behavior.
+      try {
+        invokeNoArg(frame, "close");
+      } catch (Throwable ignored2) {
+        // ignore
+      }
+    }
+  }
+
+  private static Object invokeNoArg(Object target, String method) throws Exception {
+    return invoke(target, method, new Class<?>[0], new Object[0]);
+  }
+
+  private static Object invoke(Object target, String method, Class<?>[] argTypes, Object[] args) throws Exception {
+    if (target == null) {
+      throw new NullPointerException("target");
+    }
+    Method m = target.getClass().getMethod(method, argTypes);
+    return m.invoke(target, args);
+  }
+
+  private static boolean toBoolean(Object v) {
+    if (v instanceof Boolean) {
+      return (Boolean) v;
+    }
+    return false;
+  }
+
+  private static void removeLegacyCloseButton(JFrame frame) {
+    if (frame == null) {
+      return;
+    }
+
+    JMenuBar menuBar = frame.getJMenuBar();
+    if (menuBar == null) {
+      return;
+    }
+
+    installCloseButtonWatcher(menuBar);
+
+    boolean removed = removeByClassName(menuBar, "gui.action.CloseButton");
+    if (!removed) {
+      return;
+    }
+
+    try {
+      menuBar.revalidate();
+      menuBar.repaint();
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static void installCloseButtonWatcher(final JMenuBar menuBar) {
+    if (menuBar == null) {
+      return;
+    }
+    if (Boolean.TRUE.equals(menuBar.getClientProperty(MENUBAR_CLOSE_WATCHER_KEY))) {
+      return;
+    }
+    menuBar.putClientProperty(MENUBAR_CLOSE_WATCHER_KEY, Boolean.TRUE);
+
+    try {
+      menuBar.addContainerListener(new ContainerAdapter() {
+        @Override
+        public void componentAdded(ContainerEvent e) {
+          Component child = (e == null) ? null : e.getChild();
+          if (child == null) {
+            return;
+          }
+          if (!"gui.action.CloseButton".equals(child.getClass().getName())) {
+            return;
+          }
+
+          SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+              removeByClassName(menuBar, "gui.action.CloseButton");
+              try {
+                menuBar.revalidate();
+                menuBar.repaint();
+              } catch (Throwable ignored) {
+                // best-effort only
+              }
+            }
+          });
+        }
+      });
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+  }
+
+  private static void modernizeBevelBorders(Component root) {
+    if (!(root instanceof Container)) {
+      return;
+    }
+
+    Queue<Component> queue = new ArrayDeque<>();
+    queue.add(root);
+
+    while (!queue.isEmpty()) {
+      Component c = queue.remove();
+      if (c instanceof javax.swing.JComponent) {
+        javax.swing.JComponent jc = (javax.swing.JComponent) c;
+        try {
+          if (jc.getBorder() instanceof BevelBorder) {
+            jc.setBorder(BorderFactory.createEmptyBorder());
+          }
+        } catch (Throwable ignored) {
+          // ignore
+        }
+      }
+
+      if (c instanceof Container) {
+        Component[] children;
+        try {
+          children = ((Container) c).getComponents();
+        } catch (Throwable ignored) {
+          children = null;
+        }
+
+        if (children != null) {
+          for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+              queue.add(children[i]);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private static boolean removeByClassName(java.awt.Container root, String className) {
+    if (root == null || className == null || className.trim().isEmpty()) {
+      return false;
+    }
+
+    boolean removedAny = false;
+
+    Queue<java.awt.Container> queue = new ArrayDeque<>();
+    queue.add(root);
+
+    while (!queue.isEmpty()) {
+      java.awt.Container container = queue.remove();
+      Component[] children;
+      try {
+        children = container.getComponents();
+      } catch (Throwable ignored) {
+        children = null;
+      }
+
+      if (children == null || children.length == 0) {
+        continue;
+      }
+
+      for (int i = 0; i < children.length; i++) {
+        Component child = children[i];
+        if (child == null) {
+          continue;
+        }
+
+        if (className.equals(child.getClass().getName())) {
+          try {
+            container.remove(child);
+            removedAny = true;
+          } catch (Throwable ignored) {
+            // ignore
+          }
+          continue;
+        }
+
+        if (child instanceof java.awt.Container) {
+          queue.add((java.awt.Container) child);
+        }
+      }
+    }
+
+    return removedAny;
   }
 
   private static void installCommandPaletteBinding(JRootPane rootPane) {
@@ -118,6 +465,8 @@ public final class UiEnhancements {
 
     int shortcutMask = menuShortcutMask();
     KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_K, shortcutMask);
+    int shortcutMaskEx = menuShortcutMaskEx();
+    KeyStroke ksEx = KeyStroke.getKeyStroke(KeyEvent.VK_K, shortcutMaskEx);
 
     String actionKey = "launcher.commandPalette";
     InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -133,6 +482,7 @@ public final class UiEnhancements {
     }
 
     inputMap.put(ks, actionKey);
+    inputMap.put(ksEx, actionKey);
   }
 
   private static void injectViewMenu(JFrame frame) {
@@ -280,7 +630,15 @@ public final class UiEnhancements {
     try {
       return Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
     } catch (Throwable ignored) {
-      return InputEvent.CTRL_DOWN_MASK;
+      return InputEvent.CTRL_MASK;
     }
+  }
+
+  private static int menuShortcutMaskEx() {
+    int mask = menuShortcutMask();
+    if ((mask & InputEvent.META_MASK) != 0) {
+      return InputEvent.META_DOWN_MASK;
+    }
+    return InputEvent.CTRL_DOWN_MASK;
   }
 }

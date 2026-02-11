@@ -11,10 +11,23 @@ public final class ModernMain {
       return;
     }
 
+    ExceptionReporter.install();
+
     enableSmootherText();
     applyUiScale(parsed.uiScale);
     ThemeManager.applyInitialTheme(parsed.theme);
     UiEnhancements.install();
+    ModernFileDialogs.install();
+
+    if (parsed.selfTest) {
+      int exitCode = SelfTest.run();
+      try {
+        System.exit(exitCode);
+      } catch (Throwable ignored) {
+        // ignore
+      }
+      return;
+    }
 
     delegateToJflap(parsed.remainingArgs);
   }
@@ -24,6 +37,7 @@ public final class ModernMain {
     System.out.println("  --theme=light|dark|intellij|darcula");
     System.out.println("  --uiScale=<number>        (e.g. 1.25)");
     System.out.println("  --light | --dark | --intellij | --darcula");
+    System.out.println("  --selftest               (diagnose crashes / window creation)");
     System.out.println("  --help");
     System.out.println("");
     System.out.println("In-app:");
@@ -57,12 +71,14 @@ public final class ModernMain {
 
   private static final class ParsedArgs {
     final boolean showHelp;
+    final boolean selfTest;
     final Theme theme;
     final String uiScale;
     final String[] remainingArgs;
 
-    private ParsedArgs(boolean showHelp, Theme theme, String uiScale, String[] remainingArgs) {
+    private ParsedArgs(boolean showHelp, boolean selfTest, Theme theme, String uiScale, String[] remainingArgs) {
       this.showHelp = showHelp;
+      this.selfTest = selfTest;
       this.theme = theme;
       this.uiScale = uiScale;
       this.remainingArgs = remainingArgs;
@@ -70,6 +86,7 @@ public final class ModernMain {
 
     static ParsedArgs parse(String[] args) {
       boolean showHelp = false;
+      boolean selfTest = false;
       Theme theme = parseThemeFromEnvPropsOrPrefs();
       String uiScale = System.getProperty("flatlaf.uiScale");
 
@@ -83,6 +100,9 @@ public final class ModernMain {
           case "-h":
           case "--help":
             showHelp = true;
+            continue;
+          case "--selftest":
+            selfTest = true;
             continue;
           case "--light":
             theme = Theme.LIGHT;
@@ -113,7 +133,7 @@ public final class ModernMain {
         remaining.add(arg);
       }
 
-      return new ParsedArgs(showHelp, theme, uiScale, remaining.toArray(new String[0]));
+      return new ParsedArgs(showHelp, selfTest, theme, uiScale, remaining.toArray(new String[0]));
     }
 
     private static Theme parseThemeFromEnvPropsOrPrefs() {
