@@ -144,6 +144,6 @@ This build includes:
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
 
 ## TODO:
-- make ctr + z/ ctrl + y to work
-- make select deleting possible
-  it took me 3 days to figure out how to implement the copy feature and whats causing error before i figured it out.... i hope implementing theese 2 are easier and wont take my soal away 
+- make ctr + z/ ctrl + y work
+- make select deleting possible 
+  it took me 3 days to figure out how to implement the copy feature and whats causing error before i figured it out.... i hope implementing theese 2 are easier and wont take my soul away 
