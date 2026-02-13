@@ -4,19 +4,19 @@ This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by w
 
 The primary distributables in this folder are:
 
-- `JFLAP7.1.3-better-ui.jar` (slim build)
-- `JFLAP7.1.3-better-ui-fat.jar` (optional, build with `-Fat`)
+- `JFLAP7.1.5-better-ui.jar` (slim build)
+- `JFLAP7.1.5-better-ui-fat.jar` (optional, build with `-Fat`)
 
 ## Run
 
 ```bash
-java -jar JFLAP7.1.3-better-ui.jar
+java -jar JFLAP7.1.5-better-ui.jar
 ```
 
 Launcher options:
 
 ```bash
-java -jar JFLAP7.1.3-better-ui.jar --help
+java -jar JFLAP7.1.5-better-ui.jar --help
 ```
 
 - `--theme=light|dark|intellij|darcula`
@@ -36,6 +36,9 @@ java -jar JFLAP7.1.3-better-ui.jar --help
   - Tip: you can also paste/type a hex color like `#1e1e1e`
 - `Ctrl+K`: Command Palette for quick actions.
 - `Ctrl+C` / `Ctrl+V`: canvas copy/paste for selected states/transitions (marquee selection supported, deterministic rename on paste).
+- `Delete` / `Backspace`: delete selected states/transitions.
+- `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`): undo/redo on the canvas.
+- `Ctrl+Mouse Wheel` or `Ctrl+Plus` / `Ctrl+Minus`: zoom the canvas (auto-zoom is disabled when you manually zoom).
 - Removes the legacy menu-bar close button artifact (extra "X"); use the normal window close button or `File > Close`.
 - Fixes a close-confirmation bug where clicking "Cancel" would still close the editor window.
 - File dialogs: uses the native OS Open/Save dialog (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
@@ -56,6 +59,13 @@ Open it with `Ctrl+K` (or `Cmd+K` on macOS) or via `View > Command Palette...`.
 - Use Up/Down arrows to select, `Enter` to run, `Esc` to close.
 
 ## Changelog
+
+### 2026-02-13 (v7.1.5)
+
+- Canvas: added zoom controls (Ctrl+wheel, Ctrl+Plus, Ctrl+Minus).
+- Canvas: delete selected items with Delete / Backspace.
+- Canvas: undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+- Paste: clears selection after paste so new states are immediately editable.
 
 ### 2026-02-11
 
@@ -110,13 +120,13 @@ Place the original JFLAP jar in the repo root (for example: `JFLAP7.1.jar`) or p
 Slim build:
 
 ```powershell
-.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.3-better-ui.jar
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5-better-ui.jar
 ```
 
 Fat build (keeps full reference jar contents):
 
 ```powershell
-.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.3-better-ui-fat.jar -Fat
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5-better-ui-fat.jar -Fat
 ```
 
 Notes:
@@ -142,8 +152,3 @@ This build includes:
 - Convenience copies of both licenses in `licenses/`
 
 Disclaimer: This is not an official JFLAP release and is not endorsed by the original author/maintainer.
-
-## TODO:
-- make ctr + z/ ctrl + y work
-- make select deleting possible 
-  it took me 3 days to figure out how to implement the copy feature and whats causing error before i figured it out.... i hope implementing theese 2 are easier and wont take my soul away 

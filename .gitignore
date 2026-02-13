@@ -1,5 +1,6 @@
 # Build outputs
 /JFLAP*.jar
+!/JFLAP7.1.jar
 /out/
 /build/
 /dist/

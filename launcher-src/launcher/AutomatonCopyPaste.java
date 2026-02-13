@@ -25,6 +25,7 @@ import javax.swing.JComponent;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 import java.awt.Component;
 import java.awt.KeyboardFocusManager;
@@ -41,6 +42,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
@@ -64,6 +66,9 @@ public final class AutomatonCopyPaste {
   private static final String COPYPASTE_BINDING_KEY = "launcher.modern.canvasCopyPasteBindings";
   private static final int PASTE_OFFSET_STEP = 24;
   private static final int PASTE_OFFSET_WRAP = 240;
+  private static final double ZOOM_STEP = 1.12;
+  private static final double ZOOM_MIN = 0.20;
+  private static final double ZOOM_MAX = 4.00;
 
   private static int pasteOffset = 0;
 
@@ -78,6 +83,24 @@ public final class AutomatonCopyPaste {
 
   public static void pasteForActiveWindow() {
     if (!tryPasteForActiveWindow()) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+  }
+
+  public static void undoForActiveWindow() {
+    if (!tryUndoForActiveWindow()) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+  }
+
+  public static void redoForActiveWindow() {
+    if (!tryRedoForActiveWindow()) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+  }
+
+  public static void deleteSelectionForActiveWindow() {
+    if (!tryDeleteSelectionForActiveWindow()) {
       Toolkit.getDefaultToolkit().beep();
     }
   }
@@ -115,9 +138,27 @@ public final class AutomatonCopyPaste {
     KeyStroke copyEx = KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutMaskEx);
     KeyStroke paste = KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMask);
     KeyStroke pasteEx = KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMaskEx);
+    KeyStroke delete = KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0);
+    KeyStroke backspace = KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0);
+    KeyStroke zoomIn = KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, shortcutMask);
+    KeyStroke zoomInShift = KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, shortcutMaskEx | InputEvent.SHIFT_DOWN_MASK);
+    KeyStroke zoomInNumpad = KeyStroke.getKeyStroke(KeyEvent.VK_ADD, shortcutMask);
+    KeyStroke zoomOut = KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, shortcutMask);
+    KeyStroke zoomOutNumpad = KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, shortcutMask);
+    KeyStroke undo = KeyStroke.getKeyStroke(KeyEvent.VK_Z, shortcutMask);
+    KeyStroke undoEx = KeyStroke.getKeyStroke(KeyEvent.VK_Z, shortcutMaskEx);
+    KeyStroke redo = KeyStroke.getKeyStroke(KeyEvent.VK_Y, shortcutMask);
+    KeyStroke redoEx = KeyStroke.getKeyStroke(KeyEvent.VK_Y, shortcutMaskEx);
+    KeyStroke redoShift = KeyStroke.getKeyStroke(KeyEvent.VK_Z, shortcutMaskEx | InputEvent.SHIFT_DOWN_MASK);
 
     String copyKey = "launcher.canvasCopy";
     String pasteKey = "launcher.canvasPaste";
+    String deleteKey = "launcher.canvasDeleteSelection";
+    String backspaceKey = "launcher.canvasBackspaceSelection";
+    String zoomInKey = "launcher.canvasZoomIn";
+    String zoomOutKey = "launcher.canvasZoomOut";
+    String undoKey = "launcher.canvasUndo";
+    String redoKey = "launcher.canvasRedo";
 
     InputMap inputMap = pane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
     ActionMap actionMap = pane.getActionMap();
@@ -144,10 +185,113 @@ public final class AutomatonCopyPaste {
       });
     }
 
+    if (actionMap.get(deleteKey) == null) {
+      actionMap.put(deleteKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (!delegateDeleteForTextFocus(true)) {
+            deleteSelectionForActiveWindow();
+          }
+        }
+      });
+    }
+
+    if (actionMap.get(backspaceKey) == null) {
+      actionMap.put(backspaceKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (!delegateDeleteForTextFocus(false)) {
+            deleteSelectionForActiveWindow();
+          }
+        }
+      });
+    }
+
+    if (actionMap.get(zoomInKey) == null) {
+      actionMap.put(zoomInKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (isTextFocusActive()) {
+            return;
+          }
+          applyZoom(pane, ZOOM_STEP);
+        }
+      });
+    }
+
+    if (actionMap.get(zoomOutKey) == null) {
+      actionMap.put(zoomOutKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (isTextFocusActive()) {
+            return;
+          }
+          applyZoom(pane, 1.0 / ZOOM_STEP);
+        }
+      });
+    }
+
+    if (actionMap.get(undoKey) == null) {
+      actionMap.put(undoKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (isTextFocusActive()) {
+            return;
+          }
+          undoForActiveWindow();
+        }
+      });
+    }
+
+    if (actionMap.get(redoKey) == null) {
+      actionMap.put(redoKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          if (isTextFocusActive()) {
+            return;
+          }
+          redoForActiveWindow();
+        }
+      });
+    }
+
     inputMap.put(copy, copyKey);
     inputMap.put(copyEx, copyKey);
     inputMap.put(paste, pasteKey);
     inputMap.put(pasteEx, pasteKey);
+    inputMap.put(delete, deleteKey);
+    inputMap.put(backspace, backspaceKey);
+    inputMap.put(zoomIn, zoomInKey);
+    inputMap.put(zoomInShift, zoomInKey);
+    inputMap.put(zoomInNumpad, zoomInKey);
+    inputMap.put(zoomOut, zoomOutKey);
+    inputMap.put(zoomOutNumpad, zoomOutKey);
+    inputMap.put(undo, undoKey);
+    inputMap.put(undoEx, undoKey);
+    inputMap.put(redo, redoKey);
+    inputMap.put(redoEx, redoKey);
+    inputMap.put(redoShift, redoKey);
+
+    try {
+      pane.addMouseWheelListener(new MouseAdapter() {
+        @Override
+        public void mouseWheelMoved(MouseWheelEvent e) {
+          if (e == null || !isMenuShortcutDown(e) || isTextFocusActive()) {
+            return;
+          }
+          double rotation = e.getPreciseWheelRotation();
+          if (rotation == 0.0) {
+            return;
+          }
+          double factor = Math.pow(ZOOM_STEP, -rotation);
+          if (applyZoom(pane, factor)) {
+            e.consume();
+          }
+        }
+      });
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
   }
 
   public static boolean tryCopyForActiveWindow() {
@@ -256,6 +400,210 @@ public final class AutomatonCopyPaste {
     return true;
   }
 
+  public static boolean tryUndoForActiveWindow() {
+    final Window window = activeWindow();
+    if (window == null) {
+      return false;
+    }
+
+    final AutomatonPane pane = findTargetPane(window, false);
+    if (pane == null) {
+      return false;
+    }
+
+    final Automaton automaton = automatonForPane(pane);
+    if (automaton == null) {
+      return false;
+    }
+
+    try {
+      EnvironmentFrame frame = automaton.getEnvironmentFrame();
+      if (frame == null) {
+        return false;
+      }
+      Environment env = frame.getEnvironment();
+      if (env instanceof AutomatonEnvironment) {
+        ((AutomatonEnvironment) env).restoreStatus();
+      } else {
+        return false;
+      }
+    } catch (Throwable ignored) {
+      return false;
+    }
+
+    try {
+      pane.repaint();
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    return true;
+  }
+
+  public static boolean tryRedoForActiveWindow() {
+    final Window window = activeWindow();
+    if (window == null) {
+      return false;
+    }
+
+    final AutomatonPane pane = findTargetPane(window, false);
+    if (pane == null) {
+      return false;
+    }
+
+    final Automaton automaton = automatonForPane(pane);
+    if (automaton == null) {
+      return false;
+    }
+
+    try {
+      EnvironmentFrame frame = automaton.getEnvironmentFrame();
+      if (frame == null) {
+        return false;
+      }
+      Environment env = frame.getEnvironment();
+      if (env instanceof AutomatonEnvironment) {
+        ((AutomatonEnvironment) env).redo();
+      } else {
+        return false;
+      }
+    } catch (Throwable ignored) {
+      return false;
+    }
+
+    try {
+      pane.repaint();
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    return true;
+  }
+
+  public static boolean tryDeleteSelectionForActiveWindow() {
+    final Window window = activeWindow();
+    if (window == null) {
+      return false;
+    }
+
+    final AutomatonPane pane = findTargetPane(window, true);
+    if (pane == null) {
+      return false;
+    }
+
+    final Automaton automaton = automatonForPane(pane);
+    if (automaton == null) {
+      return false;
+    }
+
+    SelectionDrawer sd = selectionDrawer(pane);
+
+    Set<State> selectedStates = new HashSet<>();
+    if (sd != null) {
+      try {
+        State[] states = sd.getSelected();
+        if (states != null) {
+          for (int i = 0; i < states.length; i++) {
+            if (states[i] != null) {
+              selectedStates.add(states[i]);
+            }
+          }
+        }
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+
+    List<State> automatonStates = selectedStatesFromAutomaton(automaton);
+    if (automatonStates != null && !automatonStates.isEmpty()) {
+      selectedStates.addAll(automatonStates);
+    }
+
+    Set<Transition> selectedTransitions = new HashSet<>();
+    if (sd != null) {
+      try {
+        Transition[] transitions = sd.getSelectedTransitions();
+        if (transitions != null) {
+          for (int i = 0; i < transitions.length; i++) {
+            if (transitions[i] != null) {
+              selectedTransitions.add(transitions[i]);
+            }
+          }
+        }
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+
+    Transition[] automatonTransitions = selectedTransitionsFromAutomaton(automaton);
+    if (automatonTransitions != null && automatonTransitions.length > 0) {
+      for (int i = 0; i < automatonTransitions.length; i++) {
+        if (automatonTransitions[i] != null) {
+          selectedTransitions.add(automatonTransitions[i]);
+        }
+      }
+    }
+
+    if (selectedStates.isEmpty() && selectedTransitions.isEmpty()) {
+      return false;
+    }
+
+    saveUndoStatus(automaton);
+
+    if (sd != null) {
+      try {
+        sd.clearSelected();
+      } catch (Throwable ignored) {
+        // ignore
+      }
+      try {
+        sd.clearSelectedTransitions();
+      } catch (Throwable ignored) {
+        // ignore
+      }
+    }
+
+    clearSelectedFlags(automaton);
+
+    for (Transition t : selectedTransitions) {
+      if (t == null) {
+        continue;
+      }
+      try {
+        automaton.removeTransition(t);
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+
+    for (State s : selectedStates) {
+      if (s == null) {
+        continue;
+      }
+      try {
+        automaton.removeState(s);
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+
+    try {
+      if (sd != null) {
+        sd.invalidate();
+      }
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    try {
+      pane.repaint();
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    return true;
+  }
+
   public static boolean hasPasteDataOnClipboard() {
     return readSnapshotFromClipboard() != null;
   }
@@ -277,8 +625,6 @@ public final class AutomatonCopyPaste {
     clearSelectedFlags(automaton);
 
     Map<Integer, State> idMap = new HashMap<>();
-    List<Transition> newTransitions = new ArrayList<>();
-    List<State> newStates = new ArrayList<>();
     Set<String> usedLabels = collectUsedLabels(automaton);
 
     for (StateSnapshot s : snapshot.states) {
@@ -322,12 +668,6 @@ public final class AutomatonCopyPaste {
       }
 
       idMap.put(s.id, created);
-      newStates.add(created);
-      try {
-        created.setSelect(true);
-      } catch (Throwable ignored) {
-        // best-effort only
-      }
     }
 
     for (TransitionSnapshot t : snapshot.transitions) {
@@ -352,8 +692,6 @@ public final class AutomatonCopyPaste {
 
       try {
         automaton.addTransition(created);
-        newTransitions.add(created);
-        created.isSelected = true;
       } catch (Throwable ignored) {
         // best-effort only
       }
@@ -363,12 +701,6 @@ public final class AutomatonCopyPaste {
       if (selectionDrawer != null) {
         selectionDrawer.clearSelected();
         selectionDrawer.clearSelectedTransitions();
-        for (State s : newStates) {
-          selectionDrawer.addSelected(s);
-        }
-        for (Transition t : newTransitions) {
-          selectionDrawer.addSelected(t);
-        }
       }
     } catch (Throwable ignored) {
       // best-effort only
@@ -779,6 +1111,120 @@ public final class AutomatonCopyPaste {
       // best-effort only
       return false;
     }
+  }
+
+  static boolean delegateDeleteForTextFocus(boolean forwardDelete) {
+    Component focus = null;
+    try {
+      focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+    } catch (Throwable ignored) {
+      focus = null;
+    }
+
+    if (!(focus instanceof JTextComponent)) {
+      return false;
+    }
+
+    JTextComponent text = (JTextComponent) focus;
+    try {
+      if (!text.isEditable() || !text.isEnabled()) {
+        return true;
+      }
+
+      int start = text.getSelectionStart();
+      int end = text.getSelectionEnd();
+      if (start != end) {
+        text.replaceSelection("");
+        return true;
+      }
+
+      int pos = text.getCaretPosition();
+      Document doc = text.getDocument();
+      if (doc == null) {
+        return true;
+      }
+
+      if (forwardDelete) {
+        if (pos < doc.getLength()) {
+          doc.remove(pos, 1);
+        }
+      } else {
+        if (pos > 0) {
+          doc.remove(pos - 1, 1);
+        }
+      }
+      return true;
+    } catch (Throwable ignored) {
+      // best-effort only
+      return true;
+    }
+  }
+
+  private static boolean applyZoom(AutomatonPane pane, double factor) {
+    if (pane == null || factor <= 0.0) {
+      return false;
+    }
+
+    double current;
+    try {
+      current = pane.getScale();
+    } catch (Throwable ignored) {
+      return false;
+    }
+
+    double next = clamp(current * factor, ZOOM_MIN, ZOOM_MAX);
+    if (Math.abs(next - current) < 0.000001) {
+      return false;
+    }
+
+    try {
+      if (pane.getAdapt()) {
+        pane.setAdapt(false);
+      }
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    try {
+      pane.setScale(next);
+    } catch (Throwable ignored) {
+      return false;
+    }
+
+    try {
+      pane.requestTransform();
+    } catch (Throwable ignored) {
+      // ignore
+    }
+
+    return true;
+  }
+
+  private static double clamp(double value, double min, double max) {
+    if (value < min) {
+      return min;
+    }
+    if (value > max) {
+      return max;
+    }
+    return value;
+  }
+
+  private static boolean isTextFocusActive() {
+    Component focus = null;
+    try {
+      focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+    } catch (Throwable ignored) {
+      focus = null;
+    }
+    return focus instanceof JTextComponent;
+  }
+
+  private static boolean isMenuShortcutDown(InputEvent e) {
+    if (e == null) {
+      return false;
+    }
+    return (e.getModifiersEx() & menuShortcutMaskEx()) != 0;
   }
 
   private static AutomatonPane findTargetPane(Window window, boolean requireSelection) {

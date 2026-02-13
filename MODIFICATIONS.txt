@@ -11,6 +11,10 @@ What changed:
 - Patched JFLAP's automaton canvas background fill to support custom canvas colors.
 - Patched JFLAP's transition labels/colors so they remain visible on dark canvases.
 - Added canvas copy/paste on editor canvases (Ctrl+C/Ctrl+V) with deterministic renaming on paste. Patch tag: canvas-copy-paste-v1.
+- Added canvas delete selection (Delete / Backspace) with undo support.
+- Added canvas zoom controls (Ctrl+Mouse Wheel, Ctrl+Plus, Ctrl+Minus).
+- Added canvas undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+- Fixed paste to clear selection so newly pasted states are immediately editable.
 - Added runtime theming for toolbar icons and a visible delete cursor.
 - Fixed Pumping Lemma dark-mode readability (HTML panes follow theme; re-applied after updates) and enlarged the "Explain" area.
 - Added minimal `DOCS/` stubs (e.g. `DOCS/index.html`) so Help doesn't error in slim builds.
@@ -18,6 +22,7 @@ What changed:
 - Removed the legacy menu-bar close button artifact (extra "X").
 
 Changelog:
+- 2026-02-13: Canvas zoom controls; Delete/Backspace selection; Undo/Redo shortcuts; paste clears selection (v7.1.5).
 - 2026-02-11: Updated documentation and increased Pumping Lemma "Explain" area height.
 - 2026-02-11: Added canvas copy/paste on editor canvases (Ctrl+C/Ctrl+V) with deterministic renaming on paste. Patch tag: canvas-copy-paste-v1.
 
