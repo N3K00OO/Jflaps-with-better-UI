@@ -12,37 +12,64 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $repoRoot
 
-$flatlafJar = Join-Path $repoRoot "deps/flatlaf-$FlatLafVersion.jar"
-if (!(Test-Path $flatlafJar)) {
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $flatlafJar) | Out-Null
-  Invoke-WebRequest `
-    -Uri "https://repo1.maven.org/maven2/com/formdev/flatlaf/$FlatLafVersion/flatlaf-$FlatLafVersion.jar" `
-    -OutFile $flatlafJar
+function Test-ValidJar {
+  param([string]$Path)
+
+  if (!(Test-Path $Path)) {
+    return $false
+  }
+
+  & cmd /c "jar tf `"$Path`" >nul 2>nul"
+  return ($LASTEXITCODE -eq 0)
 }
+
+function Ensure-DependencyJar {
+  param(
+    [string]$Path,
+    [string]$Uri,
+    [int]$MaxAttempts = 3
+  )
+
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+
+  if (Test-ValidJar -Path $Path) {
+    return
+  }
+
+  if (Test-Path $Path) {
+    Remove-Item -Force $Path -ErrorAction SilentlyContinue
+  }
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    try {
+      Invoke-WebRequest -Uri $Uri -OutFile $Path
+      if (Test-ValidJar -Path $Path) {
+        return
+      }
+      throw "Downloaded file is not a valid JAR"
+    } catch {
+      if (Test-Path $Path) {
+        Remove-Item -Force $Path -ErrorAction SilentlyContinue
+      }
+      if ($attempt -ge $MaxAttempts) {
+        throw "Failed to download dependency after $MaxAttempts attempts: $Uri. $($_.Exception.Message)"
+      }
+      Start-Sleep -Seconds ([Math]::Min(6, $attempt * 2))
+    }
+  }
+}
+
+$flatlafJar = Join-Path $repoRoot "deps/flatlaf-$FlatLafVersion.jar"
+Ensure-DependencyJar -Path $flatlafJar -Uri "https://repo1.maven.org/maven2/com/formdev/flatlaf/$FlatLafVersion/flatlaf-$FlatLafVersion.jar"
 
 $asmJar = Join-Path $repoRoot "deps/asm-$AsmVersion.jar"
-if (!(Test-Path $asmJar)) {
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $asmJar) | Out-Null
-  Invoke-WebRequest `
-    -Uri "https://repo1.maven.org/maven2/org/ow2/asm/asm/$AsmVersion/asm-$AsmVersion.jar" `
-    -OutFile $asmJar
-}
+Ensure-DependencyJar -Path $asmJar -Uri "https://repo1.maven.org/maven2/org/ow2/asm/asm/$AsmVersion/asm-$AsmVersion.jar"
 
 $batikJar = Join-Path $repoRoot "deps/batik-all-$BatikVersion.jar"
-if (!(Test-Path $batikJar)) {
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $batikJar) | Out-Null
-  Invoke-WebRequest `
-    -Uri "https://repo1.maven.org/maven2/org/apache/xmlgraphics/batik-all/$BatikVersion/batik-all-$BatikVersion.jar" `
-    -OutFile $batikJar
-}
+Ensure-DependencyJar -Path $batikJar -Uri "https://repo1.maven.org/maven2/org/apache/xmlgraphics/batik-all/$BatikVersion/batik-all-$BatikVersion.jar"
 
 $xmlApisJar = Join-Path $repoRoot "deps/xml-apis-$XmlApisVersion.jar"
-if (!(Test-Path $xmlApisJar)) {
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $xmlApisJar) | Out-Null
-  Invoke-WebRequest `
-    -Uri "https://repo1.maven.org/maven2/xml-apis/xml-apis/$XmlApisVersion/xml-apis-$XmlApisVersion.jar" `
-    -OutFile $xmlApisJar
-}
+Ensure-DependencyJar -Path $xmlApisJar -Uri "https://repo1.maven.org/maven2/xml-apis/xml-apis/$XmlApisVersion/xml-apis-$XmlApisVersion.jar"
 
 if (!(Test-Path (Join-Path $repoRoot $InputJar))) {
   throw "Input jar not found: $InputJar"
