@@ -3,6 +3,7 @@ param(
   [string]$AsmVersion = "9.9.1",
   [string]$BatikVersion = "1.17",
   [string]$XmlApisVersion = "1.3.04",
+  [string]$XmlApisExtVersion = "1.3.04",
   [string]$InputJar = "JFLAP7.1.jar",
   [string]$OutputJar = "JFLAP7.1.5.1-better-ui.jar",
   [switch]$Fat
@@ -16,6 +17,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
   -AsmVersion $AsmVersion `
   -BatikVersion $BatikVersion `
   -XmlApisVersion $XmlApisVersion `
+  -XmlApisExtVersion $XmlApisExtVersion `
   -InputJar $InputJar `
   -OutputJar $OutputJar `
   -Fat:$Fat

@@ -125,6 +125,10 @@ public final class ExportManager {
       return;
     }
 
+    if (!isSvgRuntimeAvailable(owner)) {
+      return;
+    }
+
     File target = chooseFile(owner, "svg", "SVG Image", DEFAULT_SVG_NAME, "Export SVG");
     if (target == null) {
       return;
@@ -158,11 +162,21 @@ public final class ExportManager {
       try (Writer out = new OutputStreamWriter(new FileOutputStream(target), StandardCharsets.UTF_8)) {
         svg.stream(out, true);
       }
-    } catch (Exception ex) {
+    } catch (Throwable ex) {
       showError(owner, "Failed to export SVG", ex);
     } finally {
       restoreSelectionBounds(drawer, selectionBoundsRestore);
       setDrawerTransform(drawer, restore);
+    }
+  }
+
+  private static boolean isSvgRuntimeAvailable(Component parent) {
+    try {
+      Class.forName("org.w3c.dom.svg.SVGDocument", false, ExportManager.class.getClassLoader());
+      return true;
+    } catch (Throwable ex) {
+      showError(parent, "SVG export is unavailable because SVG DOM classes are missing in this build", ex);
+      return false;
     }
   }
 
@@ -531,9 +545,22 @@ public final class ExportManager {
     }
   }
 
-  private static void showError(Component parent, String message, Exception ex) {
+  private static void showError(Component parent, String message, Throwable ex) {
+    String details;
     try {
-      JOptionPane.showMessageDialog(parent, message + ": " + ex.getMessage(), "Export Failed", JOptionPane.ERROR_MESSAGE);
+      details = (ex == null || ex.getMessage() == null || ex.getMessage().trim().isEmpty())
+        ? ((ex == null) ? "" : ex.getClass().getSimpleName())
+        : ex.getMessage();
+    } catch (Throwable ignored) {
+      details = "";
+    }
+
+    try {
+      if (details == null || details.trim().isEmpty()) {
+        JOptionPane.showMessageDialog(parent, message, "Export Failed", JOptionPane.ERROR_MESSAGE);
+      } else {
+        JOptionPane.showMessageDialog(parent, message + ": " + details, "Export Failed", JOptionPane.ERROR_MESSAGE);
+      }
     } catch (Throwable ignored) {
       Toolkit.getDefaultToolkit().beep();
     }

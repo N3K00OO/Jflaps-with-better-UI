@@ -81,7 +81,7 @@ Copy/Paste + Undo/Redo demo:
 
 Theme/color override demo:
 
-![Theme and color override demo](assets/overide_colors-andThemes.gif)
+![Theme and color override demo](assets/overide_colors-andThemes_fixed.gif)
 
 Save-as-PNG demo:
 
@@ -110,16 +110,15 @@ Fat build (keeps full reference jar contents):
 
 Notes:
 
-- First run downloads FlatLaf + ASM + Batik + xml-apis into `deps/` (Batik/xml-apis are for SVG export).
+- First run downloads FlatLaf + ASM + Batik + xml-apis + xml-apis-ext into `deps/` (Batik/xml-apis/xml-apis-ext are for SVG export).
 - `build.ps1` delegates to `JFLAP7.1.5.1.2-better-ui.ps1` and repackages the input jar plus launcher sources.
 
 ## Changelog
 
 ### 2026-02-15 (v7.1.5.1.2)
 
-- Updated README media references to current assets.
-- Converted demo videos to GIFs for inline preview in GitHub.
-- Moved changelog section to the bottom before license notes.
+- Added shortcut for Fast Run and a dialog asking whether to run another input.
+- Fixed the SVG export bug (missing SVG DOM runtime class).
 
 ### 2026-02-15 (v7.1.5.1)
 

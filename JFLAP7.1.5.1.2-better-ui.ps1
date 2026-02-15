@@ -3,6 +3,7 @@ param(
   [string]$AsmVersion = "9.9.1",
   [string]$BatikVersion = "1.17",
   [string]$XmlApisVersion = "1.3.04",
+  [string]$XmlApisExtVersion = "1.3.04",
   [string]$InputJar = "JFLAP7.1.jar",
   [string]$OutputJar = "JFLAP7.1.5.1-modern.jar"
 )
@@ -71,6 +72,9 @@ Ensure-DependencyJar -Path $batikJar -Uri "https://repo1.maven.org/maven2/org/ap
 $xmlApisJar = Join-Path $repoRoot "deps/xml-apis-$XmlApisVersion.jar"
 Ensure-DependencyJar -Path $xmlApisJar -Uri "https://repo1.maven.org/maven2/xml-apis/xml-apis/$XmlApisVersion/xml-apis-$XmlApisVersion.jar"
 
+$xmlApisExtJar = Join-Path $repoRoot "deps/xml-apis-ext-$XmlApisExtVersion.jar"
+Ensure-DependencyJar -Path $xmlApisExtJar -Uri "https://repo1.maven.org/maven2/xml-apis/xml-apis-ext/$XmlApisExtVersion/xml-apis-ext-$XmlApisExtVersion.jar"
+
 if (!(Test-Path (Join-Path $repoRoot $InputJar))) {
   throw "Input jar not found: $InputJar"
 }
@@ -88,7 +92,7 @@ if ($javaFiles.Count -eq 0) {
   throw "No Java sources found under launcher-src/"
 }
 
-$classpath = (Join-Path $repoRoot $InputJar) + ";" + $flatlafJar + ";" + $batikJar + ";" + $xmlApisJar
+$classpath = (Join-Path $repoRoot $InputJar) + ";" + $flatlafJar + ";" + $batikJar + ";" + $xmlApisJar + ";" + $xmlApisExtJar
 javac --release 8 -d $classesDir -classpath $classpath $javaFiles.FullName
 if ($LASTEXITCODE -ne 0) {
   throw "javac failed with exit code $LASTEXITCODE"
@@ -118,6 +122,26 @@ try {
     $licenseDest = Join-Path $workDir "licenses/xml-apis"
     New-Item -ItemType Directory -Force -Path $licenseDest | Out-Null
     Copy-Item -Recurse -Force -Path (Join-Path $xmlApisLicense "*") -Destination $licenseDest
+  }
+
+  $xmlApisExtDir = Join-Path $tempDir "xml-apis-ext"
+  New-Item -ItemType Directory -Force -Path $xmlApisExtDir | Out-Null
+  Push-Location $xmlApisExtDir
+  try {
+    jar xf $xmlApisExtJar
+  } finally {
+    Pop-Location
+  }
+
+  Get-ChildItem -Path $xmlApisExtDir | Where-Object { $_.Name -ne "license" } | ForEach-Object {
+    Copy-Item -Recurse -Force -Path $_.FullName -Destination $workDir
+  }
+
+  $xmlApisExtLicense = Join-Path $xmlApisExtDir "license"
+  if (Test-Path $xmlApisExtLicense) {
+    $licenseDest = Join-Path $workDir "licenses/xml-apis-ext"
+    New-Item -ItemType Directory -Force -Path $licenseDest | Out-Null
+    Copy-Item -Recurse -Force -Path (Join-Path $xmlApisExtLicense "*") -Destination $licenseDest
   }
 
   $patcherSources = Get-ChildItem -Path (Join-Path $repoRoot "tools-src/patch") -Filter *.java -File -ErrorAction SilentlyContinue
