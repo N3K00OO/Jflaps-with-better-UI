@@ -13,6 +13,11 @@ public final class CustomizationManager {
   private static final String KEY_ACCENT = "accentColor";
   private static final String KEY_BACKGROUND = "backgroundColor";
   private static final String KEY_CANVAS = "canvasColor";
+  private static final String KEY_SELECTION_BOX = "selectionBoxColor";
+  private static final String KEY_NODE = "nodeColor";
+  private static final String KEY_ARROW = "arrowColor";
+  private static final String KEY_FINAL_RING = "finalRingColor";
+  private static final String KEY_START_TRIANGLE = "startTriangleColor";
 
   private CustomizationManager() {
   }
@@ -111,11 +116,56 @@ public final class CustomizationManager {
     setOrRemove(KEY_CANVAS, normalizeHexColor(color));
   }
 
+  public static String loadSelectionBoxColor() {
+    return get(KEY_SELECTION_BOX);
+  }
+
+  public static void saveSelectionBoxColor(String color) {
+    setOrRemove(KEY_SELECTION_BOX, normalizeHexColor(color));
+  }
+
+  public static String loadNodeColor() {
+    return get(KEY_NODE);
+  }
+
+  public static void saveNodeColor(String color) {
+    setOrRemove(KEY_NODE, normalizeHexColor(color));
+  }
+
+  public static String loadArrowColor() {
+    return get(KEY_ARROW);
+  }
+
+  public static void saveArrowColor(String color) {
+    setOrRemove(KEY_ARROW, normalizeHexColor(color));
+  }
+
+  public static String loadFinalRingColor() {
+    return get(KEY_FINAL_RING);
+  }
+
+  public static void saveFinalRingColor(String color) {
+    setOrRemove(KEY_FINAL_RING, normalizeHexColor(color));
+  }
+
+  public static String loadStartTriangleColor() {
+    return get(KEY_START_TRIANGLE);
+  }
+
+  public static void saveStartTriangleColor(String color) {
+    setOrRemove(KEY_START_TRIANGLE, normalizeHexColor(color));
+  }
+
   public static void clearAll() {
     try {
       PREFS.remove(KEY_ACCENT);
       PREFS.remove(KEY_BACKGROUND);
       PREFS.remove(KEY_CANVAS);
+      PREFS.remove(KEY_SELECTION_BOX);
+      PREFS.remove(KEY_NODE);
+      PREFS.remove(KEY_ARROW);
+      PREFS.remove(KEY_FINAL_RING);
+      PREFS.remove(KEY_START_TRIANGLE);
     } catch (Throwable ignored) {
       // best-effort only
     }

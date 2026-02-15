@@ -51,7 +51,25 @@ public final class ThemeCustomizationDialog {
     final JCheckBox canvasEnabled = new JCheckBox("Override canvas background");
     final RgbColorPicker canvasPicker = new RgbColorPicker();
 
-    loadInitial(accentEnabled, accentPicker, backgroundEnabled, backgroundPicker, canvasEnabled, canvasPicker);
+    final JCheckBox selectionEnabled = new JCheckBox("Override selection box color");
+    final RgbColorPicker selectionPicker = new RgbColorPicker();
+
+    final JCheckBox nodeEnabled = new JCheckBox("Override node color");
+    final RgbColorPicker nodePicker = new RgbColorPicker();
+
+    final JCheckBox arrowEnabled = new JCheckBox("Override arrow color");
+    final RgbColorPicker arrowPicker = new RgbColorPicker();
+
+    final JCheckBox finalRingEnabled = new JCheckBox("Override final-state ring color");
+    final RgbColorPicker finalRingPicker = new RgbColorPicker();
+
+    final JCheckBox startTriangleEnabled = new JCheckBox("Override start triangle color");
+    final RgbColorPicker startTrianglePicker = new RgbColorPicker();
+
+    loadInitial(accentEnabled, accentPicker, backgroundEnabled, backgroundPicker,
+      canvasEnabled, canvasPicker, selectionEnabled, selectionPicker,
+      nodeEnabled, nodePicker, arrowEnabled, arrowPicker,
+      finalRingEnabled, finalRingPicker, startTriangleEnabled, startTrianglePicker);
 
     accentEnabled.addActionListener(new java.awt.event.ActionListener() {
       @Override
@@ -74,9 +92,49 @@ public final class ThemeCustomizationDialog {
       }
     });
 
+    selectionEnabled.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        selectionPicker.setEnabled(selectionEnabled.isSelected());
+      }
+    });
+
+    nodeEnabled.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        nodePicker.setEnabled(nodeEnabled.isSelected());
+      }
+    });
+
+    arrowEnabled.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        arrowPicker.setEnabled(arrowEnabled.isSelected());
+      }
+    });
+
+    finalRingEnabled.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        finalRingPicker.setEnabled(finalRingEnabled.isSelected());
+      }
+    });
+
+    startTriangleEnabled.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        startTrianglePicker.setEnabled(startTriangleEnabled.isSelected());
+      }
+    });
+
     accentPicker.setEnabled(accentEnabled.isSelected());
     backgroundPicker.setEnabled(backgroundEnabled.isSelected());
     canvasPicker.setEnabled(canvasEnabled.isSelected());
+    selectionPicker.setEnabled(selectionEnabled.isSelected());
+    nodePicker.setEnabled(nodeEnabled.isSelected());
+    arrowPicker.setEnabled(arrowEnabled.isSelected());
+    finalRingPicker.setEnabled(finalRingEnabled.isSelected());
+    startTrianglePicker.setEnabled(startTriangleEnabled.isSelected());
 
     JPanel fields = new JPanel(new GridBagLayout());
     GridBagConstraints c = new GridBagConstraints();
@@ -109,6 +167,46 @@ public final class ThemeCustomizationDialog {
     fields.add(canvasPicker, c);
 
     c.gridy++;
+    c.insets = new Insets(0, 10, 0, 10);
+    fields.add(selectionEnabled, c);
+
+    c.gridy++;
+    c.insets = new Insets(2, 10, 10, 10);
+    fields.add(selectionPicker, c);
+
+    c.gridy++;
+    c.insets = new Insets(0, 10, 0, 10);
+    fields.add(nodeEnabled, c);
+
+    c.gridy++;
+    c.insets = new Insets(2, 10, 10, 10);
+    fields.add(nodePicker, c);
+
+    c.gridy++;
+    c.insets = new Insets(0, 10, 0, 10);
+    fields.add(arrowEnabled, c);
+
+    c.gridy++;
+    c.insets = new Insets(2, 10, 10, 10);
+    fields.add(arrowPicker, c);
+
+    c.gridy++;
+    c.insets = new Insets(0, 10, 0, 10);
+    fields.add(finalRingEnabled, c);
+
+    c.gridy++;
+    c.insets = new Insets(2, 10, 10, 10);
+    fields.add(finalRingPicker, c);
+
+    c.gridy++;
+    c.insets = new Insets(0, 10, 0, 10);
+    fields.add(startTriangleEnabled, c);
+
+    c.gridy++;
+    c.insets = new Insets(2, 10, 10, 10);
+    fields.add(startTrianglePicker, c);
+
+    c.gridy++;
     c.weighty = 1.0;
     c.fill = GridBagConstraints.BOTH;
     fields.add(new JLabel(""), c);
@@ -117,7 +215,10 @@ public final class ThemeCustomizationDialog {
     apply.addActionListener(new java.awt.event.ActionListener() {
       @Override
       public void actionPerformed(java.awt.event.ActionEvent e) {
-        apply(accentEnabled, accentPicker, backgroundEnabled, backgroundPicker, canvasEnabled, canvasPicker);
+        apply(accentEnabled, accentPicker, backgroundEnabled, backgroundPicker,
+          canvasEnabled, canvasPicker, selectionEnabled, selectionPicker,
+          nodeEnabled, nodePicker, arrowEnabled, arrowPicker,
+          finalRingEnabled, finalRingPicker, startTriangleEnabled, startTrianglePicker);
         dialog.dispose();
       }
     });
@@ -160,14 +261,19 @@ public final class ThemeCustomizationDialog {
     });
 
     dialog.pack();
-    dialog.setMinimumSize(new Dimension(680, 280));
+    dialog.setMinimumSize(new Dimension(680, 520));
     dialog.setLocationRelativeTo(ownerWindow);
     dialog.setVisible(true);
   }
 
   private static void loadInitial(JCheckBox accentEnabled, RgbColorPicker accentPicker,
                                   JCheckBox backgroundEnabled, RgbColorPicker backgroundPicker,
-                                  JCheckBox canvasEnabled, RgbColorPicker canvasPicker) {
+                                  JCheckBox canvasEnabled, RgbColorPicker canvasPicker,
+                                  JCheckBox selectionEnabled, RgbColorPicker selectionPicker,
+                                  JCheckBox nodeEnabled, RgbColorPicker nodePicker,
+                                  JCheckBox arrowEnabled, RgbColorPicker arrowPicker,
+                                  JCheckBox finalRingEnabled, RgbColorPicker finalRingPicker,
+                                  JCheckBox startTriangleEnabled, RgbColorPicker startTrianglePicker) {
     Color initialAccent = parseHexColor(CustomizationManager.loadAccentColor());
     if (initialAccent != null) {
       accentEnabled.setSelected(true);
@@ -191,11 +297,56 @@ public final class ThemeCustomizationDialog {
     } else {
       canvasEnabled.setSelected(false);
     }
+
+    Color initialSelection = parseHexColor(CustomizationManager.loadSelectionBoxColor());
+    if (initialSelection != null) {
+      selectionEnabled.setSelected(true);
+      selectionPicker.setColor(initialSelection);
+    } else {
+      selectionEnabled.setSelected(false);
+    }
+
+    Color initialNode = parseHexColor(CustomizationManager.loadNodeColor());
+    if (initialNode != null) {
+      nodeEnabled.setSelected(true);
+      nodePicker.setColor(initialNode);
+    } else {
+      nodeEnabled.setSelected(false);
+    }
+
+    Color initialArrow = parseHexColor(CustomizationManager.loadArrowColor());
+    if (initialArrow != null) {
+      arrowEnabled.setSelected(true);
+      arrowPicker.setColor(initialArrow);
+    } else {
+      arrowEnabled.setSelected(false);
+    }
+
+    Color initialFinalRing = parseHexColor(CustomizationManager.loadFinalRingColor());
+    if (initialFinalRing != null) {
+      finalRingEnabled.setSelected(true);
+      finalRingPicker.setColor(initialFinalRing);
+    } else {
+      finalRingEnabled.setSelected(false);
+    }
+
+    Color initialStartTriangle = parseHexColor(CustomizationManager.loadStartTriangleColor());
+    if (initialStartTriangle != null) {
+      startTriangleEnabled.setSelected(true);
+      startTrianglePicker.setColor(initialStartTriangle);
+    } else {
+      startTriangleEnabled.setSelected(false);
+    }
   }
 
   private static void apply(JCheckBox accentEnabled, RgbColorPicker accentPicker,
                             JCheckBox backgroundEnabled, RgbColorPicker backgroundPicker,
-                            JCheckBox canvasEnabled, RgbColorPicker canvasPicker) {
+                            JCheckBox canvasEnabled, RgbColorPicker canvasPicker,
+                            JCheckBox selectionEnabled, RgbColorPicker selectionPicker,
+                            JCheckBox nodeEnabled, RgbColorPicker nodePicker,
+                            JCheckBox arrowEnabled, RgbColorPicker arrowPicker,
+                            JCheckBox finalRingEnabled, RgbColorPicker finalRingPicker,
+                            JCheckBox startTriangleEnabled, RgbColorPicker startTrianglePicker) {
     String accent = null;
     if (accentEnabled.isSelected()) {
       accent = RgbColorPicker.toHex(accentPicker.getColor());
@@ -211,9 +362,39 @@ public final class ThemeCustomizationDialog {
       canvas = RgbColorPicker.toHex(canvasPicker.getColor());
     }
 
+    String selection = null;
+    if (selectionEnabled.isSelected()) {
+      selection = RgbColorPicker.toHex(selectionPicker.getColor());
+    }
+
+    String node = null;
+    if (nodeEnabled.isSelected()) {
+      node = RgbColorPicker.toHex(nodePicker.getColor());
+    }
+
+    String arrow = null;
+    if (arrowEnabled.isSelected()) {
+      arrow = RgbColorPicker.toHex(arrowPicker.getColor());
+    }
+
+    String finalRing = null;
+    if (finalRingEnabled.isSelected()) {
+      finalRing = RgbColorPicker.toHex(finalRingPicker.getColor());
+    }
+
+    String startTriangle = null;
+    if (startTriangleEnabled.isSelected()) {
+      startTriangle = RgbColorPicker.toHex(startTrianglePicker.getColor());
+    }
+
     CustomizationManager.saveAccentColor(accent);
     CustomizationManager.saveBackgroundColor(background);
     CustomizationManager.saveCanvasColor(canvas);
+    CustomizationManager.saveSelectionBoxColor(selection);
+    CustomizationManager.saveNodeColor(node);
+    CustomizationManager.saveArrowColor(arrow);
+    CustomizationManager.saveFinalRingColor(finalRing);
+    CustomizationManager.saveStartTriangleColor(startTriangle);
     ThemeManager.refreshCurrentTheme();
   }
 

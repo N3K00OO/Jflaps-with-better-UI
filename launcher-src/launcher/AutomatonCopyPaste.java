@@ -23,11 +23,14 @@ import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
+import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
+import java.awt.AWTEvent;
 import java.awt.Component;
+import java.awt.Dialog;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -38,16 +41,21 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
+import java.awt.event.AWTEventListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.awt.KeyEventDispatcher;
+import java.awt.event.KeyEvent;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -64,11 +72,16 @@ public final class AutomatonCopyPaste {
   private static final String LEGACY_PREFIX = "JFLAP_UI_SELECTION_V1:";
   private static final String COPY_SUFFIX = "_copy";
   private static final String COPYPASTE_BINDING_KEY = "launcher.modern.canvasCopyPasteBindings";
+  private static final String DRAG_CONTROL_FIX_KEY = "launcher.modern.canvasDragControlFix";
   private static final int PASTE_OFFSET_STEP = 24;
   private static final int PASTE_OFFSET_WRAP = 240;
   private static final double ZOOM_STEP = 1.12;
   private static final double ZOOM_MIN = 0.20;
   private static final double ZOOM_MAX = 4.00;
+  private static final Object UNDO_REDO_GUARD_LOCK = new Object();
+  private static volatile boolean undoRedoGuardInstalled = false;
+  private static final Object TRANSITION_EDIT_GUARD_LOCK = new Object();
+  private static volatile boolean transitionEditGuardInstalled = false;
 
   private static int pasteOffset = 0;
 
@@ -131,6 +144,20 @@ public final class AutomatonCopyPaste {
     } catch (Throwable ignored) {
       // ignore
     }
+
+    if (!Boolean.TRUE.equals(pane.getClientProperty(DRAG_CONTROL_FIX_KEY))) {
+      pane.putClientProperty(DRAG_CONTROL_FIX_KEY, Boolean.TRUE);
+      try {
+        DragControlFix fix = new DragControlFix(pane);
+        pane.addMouseListener(fix);
+        pane.addMouseMotionListener(fix);
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+
+    ensureUndoRedoGuardInstalled();
+    ensureTransitionEditGuardInstalled();
 
     int shortcutMask = menuShortcutMask();
     int shortcutMaskEx = menuShortcutMaskEx();
@@ -411,6 +438,10 @@ public final class AutomatonCopyPaste {
       return false;
     }
 
+    if (!isUndoRedoSafe(pane)) {
+      return false;
+    }
+
     final Automaton automaton = automatonForPane(pane);
     if (automaton == null) {
       return false;
@@ -448,6 +479,10 @@ public final class AutomatonCopyPaste {
 
     final AutomatonPane pane = findTargetPane(window, false);
     if (pane == null) {
+      return false;
+    }
+
+    if (!isUndoRedoSafe(pane)) {
       return false;
     }
 
@@ -1225,6 +1260,492 @@ public final class AutomatonCopyPaste {
       return false;
     }
     return (e.getModifiersEx() & menuShortcutMaskEx()) != 0;
+  }
+
+  private static void ensureUndoRedoGuardInstalled() {
+    if (undoRedoGuardInstalled) {
+      return;
+    }
+    synchronized (UNDO_REDO_GUARD_LOCK) {
+      if (undoRedoGuardInstalled) {
+        return;
+      }
+      try {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager()
+          .addKeyEventDispatcher(new UndoRedoGuard());
+        undoRedoGuardInstalled = true;
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+  }
+
+  private static void ensureTransitionEditGuardInstalled() {
+    if (transitionEditGuardInstalled) {
+      return;
+    }
+    synchronized (TRANSITION_EDIT_GUARD_LOCK) {
+      if (transitionEditGuardInstalled) {
+        return;
+      }
+      try {
+        Toolkit.getDefaultToolkit().addAWTEventListener(
+          new TransitionEditGuard(),
+          AWTEvent.MOUSE_EVENT_MASK | AWTEvent.KEY_EVENT_MASK
+        );
+        transitionEditGuardInstalled = true;
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
+  }
+
+  private static boolean isUndoRedoSafe(AutomatonPane pane) {
+    if (pane == null) {
+      return false;
+    }
+    if (isDialogShowing()) {
+      return false;
+    }
+    if (isTransitionTableEditing(pane)) {
+      return false;
+    }
+    if (isArrowTransitionInFlux(pane)) {
+      return false;
+    }
+    return true;
+  }
+
+  private static boolean isDialogShowing() {
+    try {
+      Window[] windows = Window.getWindows();
+      if (windows == null) {
+        return false;
+      }
+      for (int i = 0; i < windows.length; i++) {
+        Window w = windows[i];
+        if (w instanceof Dialog) {
+          if (w.isShowing()) {
+            return true;
+          }
+        }
+      }
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+    return false;
+  }
+
+  private static boolean isTransitionTableEditing(AutomatonPane pane) {
+    if (pane == null) {
+      return false;
+    }
+    Object tool = currentTool(pane);
+    if (tool == null) {
+      return false;
+    }
+    try {
+      Field creatorField = tool.getClass().getDeclaredField("creator");
+      creatorField.setAccessible(true);
+      Object creator = creatorField.get(tool);
+      if (creator == null) {
+        return false;
+      }
+
+      Class<?> tableCreator = Class.forName("gui.editor.TableTransitionCreator");
+      if (!tableCreator.isInstance(creator)) {
+        return false;
+      }
+
+      Field editingField = tableCreator.getDeclaredField("editingTable");
+      editingField.setAccessible(true);
+      Object tableObj = editingField.get(creator);
+      if (tableObj instanceof JTable) {
+        JTable table = (JTable) tableObj;
+        return table.isShowing() || table.getParent() != null;
+      }
+      return tableObj != null;
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
+  private static boolean isTransitionEditStale(AutomatonPane pane) {
+    TransitionEditContext ctx = transitionEditContext(pane);
+    if (ctx == null) {
+      return false;
+    }
+    if (ctx.transition == null || ctx.automaton == null) {
+      return false;
+    }
+    State from = null;
+    State to = null;
+    try {
+      from = ctx.transition.getFromState();
+      to = ctx.transition.getToState();
+    } catch (Throwable ignored) {
+      from = null;
+      to = null;
+    }
+    if (from == null || to == null) {
+      return false;
+    }
+    try {
+      if (!ctx.automaton.isState(from) || !ctx.automaton.isState(to)) {
+        return true;
+      }
+    } catch (Throwable ignored) {
+      return false;
+    }
+    if (!hasTransitionMapEntry(ctx.automaton, "transitionFromStateMap", from)) {
+      return true;
+    }
+    if (!hasTransitionMapEntry(ctx.automaton, "transitionToStateMap", to)) {
+      return true;
+    }
+    return false;
+  }
+
+  private static boolean hasTransitionMapEntry(Automaton automaton, String fieldName, State state) {
+    if (automaton == null || state == null || fieldName == null) {
+      return true;
+    }
+    try {
+      Field f = findFieldRecursive(automaton.getClass(), fieldName);
+      if (f == null) {
+        return true;
+      }
+      Object mapObj = f.get(automaton);
+      if (!(mapObj instanceof java.util.Map)) {
+        return true;
+      }
+      java.util.Map<?, ?> map = (java.util.Map<?, ?>) mapObj;
+      return map.containsKey(state);
+    } catch (Throwable ignored) {
+      return true;
+    }
+  }
+
+  private static Field findFieldRecursive(Class<?> type, String name) {
+    Class<?> c = type;
+    while (c != null) {
+      try {
+        Field f = c.getDeclaredField(name);
+        f.setAccessible(true);
+        return f;
+      } catch (NoSuchFieldException ignored) {
+        c = c.getSuperclass();
+      } catch (Throwable ignored) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private static boolean cancelTransitionEdit(AutomatonPane pane) {
+    TransitionEditContext ctx = transitionEditContext(pane);
+    if (ctx == null || ctx.creator == null) {
+      return false;
+    }
+    try {
+      Method stopEditing = ctx.creator.getClass().getDeclaredMethod("stopEditing", boolean.class);
+      stopEditing.setAccessible(true);
+      stopEditing.invoke(ctx.creator, true);
+      return true;
+    } catch (Throwable ignored) {
+      // best-effort only
+    }
+    return false;
+  }
+
+  private static TransitionEditContext transitionEditContext(AutomatonPane pane) {
+    if (pane == null) {
+      return null;
+    }
+    Object tool = currentTool(pane);
+    if (tool == null) {
+      return null;
+    }
+    try {
+      Field creatorField = tool.getClass().getDeclaredField("creator");
+      creatorField.setAccessible(true);
+      Object creator = creatorField.get(tool);
+      if (creator == null) {
+        return null;
+      }
+      Class<?> tableCreator = Class.forName("gui.editor.TableTransitionCreator");
+      if (!tableCreator.isInstance(creator)) {
+        return null;
+      }
+      Field editingField = tableCreator.getDeclaredField("editingTable");
+      editingField.setAccessible(true);
+      Object tableObj = editingField.get(creator);
+      if (!(tableObj instanceof JTable)) {
+        return null;
+      }
+      JTable table = (JTable) tableObj;
+      if (table == null || (table.getParent() == null && !table.isShowing())) {
+        return null;
+      }
+      Field transitionField = tableCreator.getDeclaredField("transition");
+      transitionField.setAccessible(true);
+      Object transitionObj = transitionField.get(creator);
+      if (!(transitionObj instanceof Transition)) {
+        return new TransitionEditContext(creator, pane, null, automatonForPane(pane));
+      }
+      return new TransitionEditContext(creator, pane, (Transition) transitionObj, automatonForPane(pane));
+    } catch (Throwable ignored) {
+      return null;
+    }
+  }
+
+  private static boolean isArrowTransitionInFlux(AutomatonPane pane) {
+    Object tool = currentTool(pane);
+    if (tool == null) {
+      return false;
+    }
+    try {
+      if (!"gui.editor.ArrowTool".equals(tool.getClass().getName())) {
+        return false;
+      }
+      Field transitionInFlux = tool.getClass().getDeclaredField("transitionInFlux");
+      transitionInFlux.setAccessible(true);
+      Object inFluxObj = transitionInFlux.get(tool);
+      return (inFluxObj instanceof Boolean) && ((Boolean) inFluxObj).booleanValue();
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
+  private static Object currentTool(AutomatonPane pane) {
+    if (pane == null) {
+      return null;
+    }
+    try {
+      gui.editor.EditorPane creator = pane.getCreator();
+      if (creator == null) {
+        return null;
+      }
+      gui.editor.ToolBar toolBar = creator.getToolBar();
+      if (toolBar == null) {
+        return null;
+      }
+      return toolBar.getCurrentTool();
+    } catch (Throwable ignored) {
+      return null;
+    }
+  }
+
+  private static final class DragControlFix extends MouseAdapter {
+    private final AutomatonPane pane;
+    private Point lastDrag;
+
+    private DragControlFix(AutomatonPane pane) {
+      this.pane = pane;
+    }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+      if (e == null) {
+        lastDrag = null;
+        return;
+      }
+      lastDrag = e.getPoint();
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+      lastDrag = null;
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+      if (e == null) {
+        return;
+      }
+      if (lastDrag == null) {
+        lastDrag = e.getPoint();
+        return;
+      }
+      Point current = e.getPoint();
+      int dx = current.x - lastDrag.x;
+      int dy = current.y - lastDrag.y;
+      lastDrag = current;
+      if (dx == 0 && dy == 0) {
+        return;
+      }
+      if (!isStateDragActive(pane)) {
+        return;
+      }
+      nudgeSelectedTransitionControls(pane, dx, dy);
+    }
+  }
+
+  private static final class TransitionEditGuard implements AWTEventListener {
+    @Override
+    public void eventDispatched(AWTEvent event) {
+      if (event == null) {
+        return;
+      }
+      int id = event.getID();
+      boolean isKey = event instanceof KeyEvent && id == KeyEvent.KEY_PRESSED;
+      boolean isMouse = event instanceof MouseEvent && id == MouseEvent.MOUSE_PRESSED;
+      if (!isKey && !isMouse) {
+        return;
+      }
+
+      Window window = activeWindow();
+      if (window == null) {
+        return;
+      }
+      AutomatonPane pane = findTargetPane(window, false);
+      if (pane == null) {
+        return;
+      }
+
+      if (!isTransitionTableEditing(pane)) {
+        return;
+      }
+
+      if (isTransitionEditStale(pane)) {
+        cancelTransitionEdit(pane);
+        if (event instanceof InputEvent) {
+          try {
+            ((InputEvent) event).consume();
+          } catch (Throwable ignored) {
+            // ignore
+          }
+        }
+      }
+    }
+  }
+
+  private static final class TransitionEditContext {
+    final Object creator;
+    final AutomatonPane pane;
+    final Transition transition;
+    final Automaton automaton;
+
+    private TransitionEditContext(Object creator,
+                                  AutomatonPane pane,
+                                  Transition transition,
+                                  Automaton automaton) {
+      this.creator = creator;
+      this.pane = pane;
+      this.transition = transition;
+      this.automaton = automaton;
+    }
+  }
+
+  private static final class UndoRedoGuard implements KeyEventDispatcher {
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+      if (e == null || e.getID() != KeyEvent.KEY_PRESSED) {
+        return false;
+      }
+      int code = e.getKeyCode();
+      if (code != KeyEvent.VK_Z && code != KeyEvent.VK_Y) {
+        return false;
+      }
+      if (!isMenuShortcutDown(e)) {
+        return false;
+      }
+      Window window = activeWindow();
+      if (window == null) {
+        return false;
+      }
+      AutomatonPane pane = findTargetPane(window, false);
+      if (pane == null || !isUndoRedoSafe(pane)) {
+        try {
+          e.consume();
+        } catch (Throwable ignored) {
+          // ignore
+        }
+        return true;
+      }
+      return false;
+    }
+  }
+
+  private static boolean isStateDragActive(AutomatonPane pane) {
+    try {
+      Object tool = currentTool(pane);
+      if (tool == null) {
+        return false;
+      }
+      if (!"gui.editor.ArrowTool".equals(tool.getClass().getName())) {
+        return false;
+      }
+      Field lastClickedState = tool.getClass().getDeclaredField("lastClickedState");
+      lastClickedState.setAccessible(true);
+      Object state = lastClickedState.get(tool);
+      if (state == null) {
+        return false;
+      }
+      Field transitionInFlux = tool.getClass().getDeclaredField("transitionInFlux");
+      transitionInFlux.setAccessible(true);
+      Object inFluxObj = transitionInFlux.get(tool);
+      if (inFluxObj instanceof Boolean && ((Boolean) inFluxObj).booleanValue()) {
+        return false;
+      }
+      return true;
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
+  private static void nudgeSelectedTransitionControls(AutomatonPane pane, int dx, int dy) {
+    if (pane == null) {
+      return;
+    }
+    Automaton automaton = automatonForPane(pane);
+    if (automaton == null) {
+      return;
+    }
+    List<State> selectedStates = selectedStatesFromAutomaton(automaton);
+    if (selectedStates == null || selectedStates.isEmpty()) {
+      return;
+    }
+
+    Set<State> selectedSet = new HashSet<>(selectedStates);
+    Transition[] transitions;
+    try {
+      transitions = automaton.getTransitions();
+    } catch (Throwable ignored) {
+      transitions = null;
+    }
+    if (transitions == null || transitions.length == 0) {
+      return;
+    }
+
+    for (int i = 0; i < transitions.length; i++) {
+      Transition t = transitions[i];
+      if (t == null) {
+        continue;
+      }
+      State from = t.getFromState();
+      State to = t.getToState();
+      if (from == null || to == null) {
+        continue;
+      }
+      if (!selectedSet.contains(from) || !selectedSet.contains(to)) {
+        continue;
+      }
+      Point control;
+      try {
+        control = t.getControl();
+      } catch (Throwable ignored) {
+        control = null;
+      }
+      if (control == null) {
+        continue;
+      }
+      try {
+        t.setControl(new Point(control.x + dx, control.y + dy));
+      } catch (Throwable ignored) {
+        // best-effort only
+      }
+    }
   }
 
   private static AutomatonPane findTargetPane(Window window, boolean requireSelection) {

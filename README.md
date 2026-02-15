@@ -4,19 +4,19 @@ This repo builds a more modern, themeable UI for the original **JFLAP 7.1** by w
 
 The primary distributables in this folder are:
 
-- `JFLAP7.1.5-better-ui.jar` (slim build)
-- `JFLAP7.1.5-better-ui-fat.jar` (optional, build with `-Fat`)
+- `JFLAP7.1.5.1-better-ui.jar` (slim build)
+- `JFLAP7.1.5.1-better-ui-fat.jar` (optional, build with `-Fat`)
 
 ## Run
 
 ```bash
-java -jar JFLAP7.1.5-better-ui.jar
+java -jar JFLAP7.1.5.1-better-ui.jar
 ```
 
 Launcher options:
 
 ```bash
-java -jar JFLAP7.1.5-better-ui.jar --help
+java -jar JFLAP7.1.5.1-better-ui.jar --help
 ```
 
 - `--theme=light|dark|intellij|darcula`
@@ -33,12 +33,19 @@ java -jar JFLAP7.1.5-better-ui.jar --help
   - Accent color
   - App background
   - Canvas background (optional checkbox)
+  - Selection box color (optional checkbox)
+  - Node color (optional checkbox)
+  - Arrow color (optional checkbox)
+  - Final-state ring color (optional checkbox)
+  - Start triangle color (optional checkbox)
   - Tip: you can also paste/type a hex color like `#1e1e1e`
 - `Ctrl+K`: Command Palette for quick actions.
 - `Ctrl+C` / `Ctrl+V`: canvas copy/paste for selected states/transitions (marquee selection supported, deterministic rename on paste).
 - `Delete` / `Backspace`: delete selected states/transitions.
 - `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`): undo/redo on the canvas.
 - `Ctrl+Mouse Wheel` or `Ctrl+Plus` / `Ctrl+Minus`: zoom the canvas (auto-zoom is disabled when you manually zoom).
+- `Ctrl+Shift+R`: Fast Run shortcut with an optional rerun prompt for another input.
+- `File > Export PNG...` / `File > Export SVG...`: export the current automaton using the canvas background color, centered with a tight border.
 - Removes the legacy menu-bar close button artifact (extra "X"); use the normal window close button or `File > Close`.
 - Fixes a close-confirmation bug where clicking "Cancel" would still close the editor window.
 - File dialogs: uses the native OS Open/Save dialog (`java.awt.FileDialog`) when possible (falls back to Swing `JFileChooser`).
@@ -59,6 +66,21 @@ Open it with `Ctrl+K` (or `Cmd+K` on macOS) or via `View > Command Palette...`.
 - Use Up/Down arrows to select, `Enter` to run, `Esc` to close.
 
 ## Changelog
+
+### 2026-02-15 (v7.1.5.1)
+
+- Fixed hex color paste/edit crashes in the theme customization dialog.
+- Added node + arrow color overrides in the theme customization dialog.
+- Export: tightened image borders and centered automata consistently for PNG/SVG output.
+- Added overrides for final-state outer ring color and start triangle color.
+
+### 2026-02-14 (v7.1.5.1)
+
+- Undo/redo now guarded while transition-edit tables are open to prevent crashes.
+- Transition edit tables cancel safely if the underlying states are no longer valid (prevents addTransition NPE).
+- Fast Run shortcut (`Ctrl+Shift+R`) with a rerun prompt for another input.
+- Theme: add a selection box color override.
+- Export: add PNG/SVG export that respects the canvas background color.
 
 ### 2026-02-13 (v7.1.5)
 
@@ -120,18 +142,18 @@ Place the original JFLAP jar in the repo root (for example: `JFLAP7.1.jar`) or p
 Slim build:
 
 ```powershell
-.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5-better-ui.jar
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5.1-better-ui.jar
 ```
 
 Fat build (keeps full reference jar contents):
 
 ```powershell
-.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5-better-ui-fat.jar -Fat
+.\build.ps1 -InputJar .\JFLAP7.1.jar -OutputJar JFLAP7.1.5.1-better-ui-fat.jar -Fat
 ```
 
 Notes:
 
-- First run downloads FlatLaf + ASM into `deps/`.
+- First run downloads FlatLaf + ASM + Batik + xml-apis into `deps/` (Batik/xml-apis are for SVG export).
 - `build.ps1` delegates to `build-modern.ps1` and repackages the input jar plus launcher sources.
 
 ## License / Redistribution Notes

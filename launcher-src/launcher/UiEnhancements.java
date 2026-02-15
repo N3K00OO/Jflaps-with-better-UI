@@ -57,6 +57,8 @@ public final class UiEnhancements {
   private static final String MENU_INJECTED_KEY = "launcher.modern.viewMenuInjected";
   private static final String HELP_INJECTED_KEY = "launcher.modern.helpMenuInjected";
   private static final String ROOTPANE_BINDING_KEY = "launcher.modern.commandPaletteBinding";
+  private static final String FAST_RUN_BINDING_KEY = "launcher.modern.fastRunBinding";
+  private static final String FILE_EXPORT_INJECTED_KEY = "launcher.modern.fileExportInjected";
   private static final String MENUBAR_WATCHER_KEY = "launcher.modern.menuBarWatcher";
   private static final String MENUBAR_CLOSE_WATCHER_KEY = "launcher.modern.menuBarCloseWatcher";
   private static final String ENVFRAME_CLOSE_FIX_KEY = "launcher.modern.envFrameCloseFix";
@@ -202,9 +204,11 @@ public final class UiEnhancements {
     if (window instanceof JFrame) {
       JFrame frame = (JFrame) window;
       installCommandPaletteBinding(frame.getRootPane());
+      installFastRunBinding(frame.getRootPane());
       installEnvironmentFrameCloseFix(frame);
       injectViewMenu(frame);
       injectHelpMenu(frame);
+      injectFileExportMenu(frame);
       installMenuBarWatcher(frame);
       installAutomatonCopyPasteBindings(frame);
       removeLegacyCloseButton(frame);
@@ -218,6 +222,7 @@ public final class UiEnhancements {
     if (window instanceof javax.swing.JDialog) {
       javax.swing.JDialog dialog = (javax.swing.JDialog) window;
       installCommandPaletteBinding(dialog.getRootPane());
+      installFastRunBinding(dialog.getRootPane());
       modernizeBevelBorders(dialog);
       installAutomatonCopyPasteBindings(dialog);
       AssetThemer.applyToWindow(dialog);
@@ -1058,6 +1063,37 @@ public final class UiEnhancements {
     inputMap.put(ksEx, actionKey);
   }
 
+  private static void installFastRunBinding(JRootPane rootPane) {
+    if (rootPane == null) {
+      return;
+    }
+    if (Boolean.TRUE.equals(rootPane.getClientProperty(FAST_RUN_BINDING_KEY))) {
+      return;
+    }
+    rootPane.putClientProperty(FAST_RUN_BINDING_KEY, Boolean.TRUE);
+
+    int shortcutMask = menuShortcutMask();
+    int shortcutMaskEx = menuShortcutMaskEx();
+    KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_R, shortcutMask | InputEvent.SHIFT_DOWN_MASK);
+    KeyStroke ksEx = KeyStroke.getKeyStroke(KeyEvent.VK_R, shortcutMaskEx | InputEvent.SHIFT_DOWN_MASK);
+
+    String actionKey = "launcher.fastRunWithRerun";
+    InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    ActionMap actionMap = rootPane.getActionMap();
+
+    if (actionMap.get(actionKey) == null) {
+      actionMap.put(actionKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+          FastRun.triggerFastRunWithRerun();
+        }
+      });
+    }
+
+    inputMap.put(ks, actionKey);
+    inputMap.put(ksEx, actionKey);
+  }
+
   private static void injectViewMenu(JFrame frame) {
     JMenuBar menuBar = frame.getJMenuBar();
     if (menuBar == null) {
@@ -1130,6 +1166,43 @@ public final class UiEnhancements {
       }
     });
     helpMenu.add(aboutItem);
+  }
+
+  private static void injectFileExportMenu(JFrame frame) {
+    JMenuBar menuBar = frame.getJMenuBar();
+    if (menuBar == null) {
+      return;
+    }
+
+    JMenu fileMenu = findMenu(menuBar, "File");
+    if (fileMenu == null) {
+      return;
+    }
+
+    if (Boolean.TRUE.equals(fileMenu.getClientProperty(FILE_EXPORT_INJECTED_KEY))) {
+      return;
+    }
+    fileMenu.putClientProperty(FILE_EXPORT_INJECTED_KEY, Boolean.TRUE);
+
+    JMenuItem exportPng = new JMenuItem("Export PNG...");
+    exportPng.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        ExportManager.exportPngForActiveWindow();
+      }
+    });
+
+    JMenuItem exportSvg = new JMenuItem("Export SVG...");
+    exportSvg.addActionListener(new java.awt.event.ActionListener() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        ExportManager.exportSvgForActiveWindow();
+      }
+    });
+
+    fileMenu.add(new JSeparator());
+    fileMenu.add(exportPng);
+    fileMenu.add(exportSvg);
   }
 
   private static void addThemeItem(JMenu themeMenu, ButtonGroup group, String label, final Theme theme) {

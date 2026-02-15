@@ -26,6 +26,7 @@ public final class RgbColorPicker extends JPanel {
   private final JTextField hex = new JTextField();
 
   private boolean updating = false;
+  private boolean suppressHexUpdate = false;
 
   public RgbColorPicker() {
     super(new GridBagLayout());
@@ -133,10 +134,17 @@ public final class RgbColorPicker extends JPanel {
   private void updatePreview() {
     Color color = getColor();
     preview.setBackground(color);
+    if (suppressHexUpdate) {
+      return;
+    }
+    final String hexValue = toHex(color);
+    if (hexValue != null && hexValue.equalsIgnoreCase(hex.getText())) {
+      return;
+    }
     withUpdating(new Runnable() {
       @Override
       public void run() {
-        hex.setText(toHex(color));
+        hex.setText(hexValue == null ? "" : hexValue);
       }
     });
   }
@@ -192,16 +200,21 @@ public final class RgbColorPicker extends JPanel {
     final int g = (rgb >> 8) & 0xff;
     final int b = rgb & 0xff;
 
-    withUpdating(new Runnable() {
-      @Override
-      public void run() {
-        red.setValue(r);
-        green.setValue(g);
-        blue.setValue(b);
-      }
-    });
+    suppressHexUpdate = true;
+    try {
+      withUpdating(new Runnable() {
+        @Override
+        public void run() {
+          red.setValue(r);
+          green.setValue(g);
+          blue.setValue(b);
+        }
+      });
 
-    updatePreview();
+      updatePreview();
+    } finally {
+      suppressHexUpdate = false;
+    }
   }
 
   private void withUpdating(Runnable r) {

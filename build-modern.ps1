@@ -1,8 +1,10 @@
 param(
   [string]$FlatLafVersion = "3.7",
   [string]$AsmVersion = "9.9.1",
+  [string]$BatikVersion = "1.17",
+  [string]$XmlApisVersion = "1.3.04",
   [string]$InputJar = "JFLAP7.1.jar",
-  [string]$OutputJar = "JFLAP7.1.5-modern.jar"
+  [string]$OutputJar = "JFLAP7.1.5.1-modern.jar"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +28,22 @@ if (!(Test-Path $asmJar)) {
     -OutFile $asmJar
 }
 
+$batikJar = Join-Path $repoRoot "deps/batik-all-$BatikVersion.jar"
+if (!(Test-Path $batikJar)) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $batikJar) | Out-Null
+  Invoke-WebRequest `
+    -Uri "https://repo1.maven.org/maven2/org/apache/xmlgraphics/batik-all/$BatikVersion/batik-all-$BatikVersion.jar" `
+    -OutFile $batikJar
+}
+
+$xmlApisJar = Join-Path $repoRoot "deps/xml-apis-$XmlApisVersion.jar"
+if (!(Test-Path $xmlApisJar)) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $xmlApisJar) | Out-Null
+  Invoke-WebRequest `
+    -Uri "https://repo1.maven.org/maven2/xml-apis/xml-apis/$XmlApisVersion/xml-apis-$XmlApisVersion.jar" `
+    -OutFile $xmlApisJar
+}
+
 if (!(Test-Path (Join-Path $repoRoot $InputJar))) {
   throw "Input jar not found: $InputJar"
 }
@@ -43,7 +61,7 @@ if ($javaFiles.Count -eq 0) {
   throw "No Java sources found under launcher-src/"
 }
 
-$classpath = (Join-Path $repoRoot $InputJar) + ";" + $flatlafJar
+$classpath = (Join-Path $repoRoot $InputJar) + ";" + $flatlafJar + ";" + $batikJar + ";" + $xmlApisJar
 javac --release 8 -d $classesDir -classpath $classpath $javaFiles.FullName
 if ($LASTEXITCODE -ne 0) {
   throw "javac failed with exit code $LASTEXITCODE"
@@ -53,6 +71,27 @@ Push-Location $workDir
 try {
   jar xf (Join-Path $repoRoot $InputJar)
   jar xf $flatlafJar
+  jar xf $batikJar
+
+  $xmlApisDir = Join-Path $tempDir "xml-apis"
+  New-Item -ItemType Directory -Force -Path $xmlApisDir | Out-Null
+  Push-Location $xmlApisDir
+  try {
+    jar xf $xmlApisJar
+  } finally {
+    Pop-Location
+  }
+
+  Get-ChildItem -Path $xmlApisDir | Where-Object { $_.Name -ne "license" } | ForEach-Object {
+    Copy-Item -Recurse -Force -Path $_.FullName -Destination $workDir
+  }
+
+  $xmlApisLicense = Join-Path $xmlApisDir "license"
+  if (Test-Path $xmlApisLicense) {
+    $licenseDest = Join-Path $workDir "licenses/xml-apis"
+    New-Item -ItemType Directory -Force -Path $licenseDest | Out-Null
+    Copy-Item -Recurse -Force -Path (Join-Path $xmlApisLicense "*") -Destination $licenseDest
+  }
 
   $patcherSources = Get-ChildItem -Path (Join-Path $repoRoot "tools-src/patch") -Filter *.java -File -ErrorAction SilentlyContinue
   if ($patcherSources -and $patcherSources.Count -gt 0) {
@@ -69,7 +108,10 @@ try {
 
     $patchTargets = @(
       @{ Class = "patch.AutomatonPanePatcher"; Target = "gui/viewer/AutomatonPane.class" },
-      @{ Class = "patch.CurvedArrowPatcher"; Target = "gui/viewer/CurvedArrow.class" }
+      @{ Class = "patch.CurvedArrowPatcher"; Target = "gui/viewer/CurvedArrow.class" },
+      @{ Class = "patch.AutomatonDrawerPatcher"; Target = "gui/viewer/AutomatonDrawer.class" },
+      @{ Class = "patch.SelectionDrawerPatcher"; Target = "gui/viewer/SelectionDrawer.class" },
+      @{ Class = "patch.StateDrawerPatcher"; Target = "gui/viewer/StateDrawer.class" }
     )
 
     foreach ($t in $patchTargets) {

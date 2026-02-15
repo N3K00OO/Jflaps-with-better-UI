@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build
+        shell: pwsh
+        run: ./build-modern.ps1 -OutputJar JFLAP7.1.5.1-better-ui.jar
+
+      - name: Release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $version = "7.1.5.1"
+          $run = $env:GITHUB_RUN_NUMBER
+          $tag = "v$version-build.$run"
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=JFLAP $version Modern build $run" >> $env:GITHUB_OUTPUT
+
+      - name: Write release notes
+        id: notes
+        shell: pwsh
+        run: |
+          @"
+          ## JFLAP 7.1.5.1 Modern (v5.1) - Changes
+
+          - Undo/redo guarded while transition-edit tables are open to prevent crashes.
+          - Transition edit tables cancel safely if the underlying states are no longer valid (prevents addTransition NPE).
+          - Canvas zoom controls (Ctrl+wheel, Ctrl+Plus, Ctrl+Minus).
+          - Delete/Backspace removes selected states/transitions.
+          - Undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+          - Paste clears selection so new states are immediately editable.
+          "@ | Set-Content -NoNewline -Encoding UTF8 release-notes.md
+          "path=release-notes.md" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          body_path: ${{ steps.notes.outputs.path }}
+          files: |
+            JFLAP7.1.5.1-better-ui.jar
