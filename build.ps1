@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-& (Join-Path $repoRoot "build-modern.ps1") `
+& (Join-Path $repoRoot "JFLAP7.1.5.1.2-better-ui.ps1") `
   -FlatLafVersion $FlatLafVersion `
   -AsmVersion $AsmVersion `
   -BatikVersion $BatikVersion `

@@ -23,7 +23,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: ./build-modern.ps1 -OutputJar JFLAP7.1.5.1-better-ui.jar
+        run: ./JFLAP7.1.5.1.2-better-ui.ps1 -OutputJar JFLAP7.1.5.1-better-ui.jar
 
       - name: Release metadata
         id: meta

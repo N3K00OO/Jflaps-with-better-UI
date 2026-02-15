@@ -64,6 +64,7 @@ public final class UiEnhancements {
   private static final String ENVFRAME_CLOSE_FIX_KEY = "launcher.modern.envFrameCloseFix";
   private static final String READABILITY_TIMER_KEY = "launcher.modern.readabilityTimer";
   private static final String HTML_READABILITY_KEY = "launcher.modern.htmlReadabilityHooked";
+  private static final String FAST_RUN_MENU_TEXT = "Fast Run... (CapsLock+R)";
 
   private static volatile boolean installed = false;
 
@@ -209,6 +210,7 @@ public final class UiEnhancements {
       injectViewMenu(frame);
       injectHelpMenu(frame);
       injectFileExportMenu(frame);
+      annotateFastRunMenuItem(frame);
       installMenuBarWatcher(frame);
       installAutomatonCopyPasteBindings(frame);
       removeLegacyCloseButton(frame);
@@ -1072,10 +1074,8 @@ public final class UiEnhancements {
     }
     rootPane.putClientProperty(FAST_RUN_BINDING_KEY, Boolean.TRUE);
 
-    int shortcutMask = menuShortcutMask();
-    int shortcutMaskEx = menuShortcutMaskEx();
-    KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_R, shortcutMask | InputEvent.SHIFT_DOWN_MASK);
-    KeyStroke ksEx = KeyStroke.getKeyStroke(KeyEvent.VK_R, shortcutMaskEx | InputEvent.SHIFT_DOWN_MASK);
+    KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_R, 0);
+    KeyStroke ksShift = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.SHIFT_DOWN_MASK);
 
     String actionKey = "launcher.fastRunWithRerun";
     InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -1085,13 +1085,24 @@ public final class UiEnhancements {
       actionMap.put(actionKey, new AbstractAction() {
         @Override
         public void actionPerformed(ActionEvent e) {
+          if (!isCapsLockEnabled()) {
+            return;
+          }
           FastRun.triggerFastRunWithRerun();
         }
       });
     }
 
     inputMap.put(ks, actionKey);
-    inputMap.put(ksEx, actionKey);
+    inputMap.put(ksShift, actionKey);
+  }
+
+  private static boolean isCapsLockEnabled() {
+    try {
+      return Toolkit.getDefaultToolkit().getLockingKeyState(KeyEvent.VK_CAPS_LOCK);
+    } catch (Throwable ignored) {
+      return false;
+    }
   }
 
   private static void injectViewMenu(JFrame frame) {
@@ -1203,6 +1214,52 @@ public final class UiEnhancements {
     fileMenu.add(new JSeparator());
     fileMenu.add(exportPng);
     fileMenu.add(exportSvg);
+  }
+
+  private static void annotateFastRunMenuItem(JFrame frame) {
+    if (frame == null) {
+      return;
+    }
+
+    JMenuBar menuBar = frame.getJMenuBar();
+    if (menuBar == null) {
+      return;
+    }
+
+    int topCount = menuBar.getMenuCount();
+    for (int i = 0; i < topCount; i++) {
+      JMenu menu = menuBar.getMenu(i);
+      if (menu == null) {
+        continue;
+      }
+      annotateFastRunMenuItem(menu);
+    }
+  }
+
+  private static void annotateFastRunMenuItem(JMenu menu) {
+    if (menu == null) {
+      return;
+    }
+
+    int itemCount = menu.getItemCount();
+    for (int i = 0; i < itemCount; i++) {
+      JMenuItem item = menu.getItem(i);
+      if (item == null) {
+        continue;
+      }
+
+      String text = item.getText();
+      if (text != null) {
+        String trimmed = text.trim();
+        if (trimmed.startsWith("Fast Run") && !trimmed.contains("CapsLock+R")) {
+          item.setText(FAST_RUN_MENU_TEXT);
+        }
+      }
+
+      if (item instanceof JMenu) {
+        annotateFastRunMenuItem((JMenu) item);
+      }
+    }
   }
 
   private static void addThemeItem(JMenu themeMenu, ButtonGroup group, String label, final Theme theme) {

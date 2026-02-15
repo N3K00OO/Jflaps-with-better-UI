@@ -17,7 +17,7 @@ What changed:
 - Added canvas delete selection (Delete / Backspace) with undo support.
 - Added canvas zoom controls (Ctrl+Mouse Wheel, Ctrl+Plus, Ctrl+Minus).
 - Added canvas undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
-- Added a Fast Run shortcut (Ctrl+Shift+R) with a rerun prompt for another input.
+- Added a Fast Run shortcut (CapsLock+R) with a rerun prompt for another input.
 - Added PNG/SVG export actions that respect the canvas background color.
 - Tightened PNG/SVG export borders and centered automata consistently in saved images.
 - Guarded undo/redo while transition-edit tables are open to prevent crashes.
@@ -35,7 +35,7 @@ Changelog:
 - 2026-02-15: Added final-state ring and start-triangle color overrides (v7.1.5.1).
 - 2026-02-15: Centered PNG/SVG exports using content bounds and reduced border padding (v7.1.5.1).
 - 2026-02-14: Guard undo/redo while transition-edit tables are open; cancel stale transition edits to prevent addTransition crashes (v7.1.5.1).
-- 2026-02-14: Fast Run shortcut (Ctrl+Shift+R) with rerun prompt for another input (v7.1.5.1).
+- 2026-02-14: Fast Run shortcut (CapsLock+R) with rerun prompt for another input (v7.1.5.1).
 - 2026-02-14: Selection box color override + PNG/SVG export using the canvas background color (v7.1.5.1).
 - 2026-02-13: Canvas zoom controls; Delete/Backspace selection; Undo/Redo shortcuts; paste clears selection (v7.1.5).
 - 2026-02-11: Updated documentation and increased Pumping Lemma "Explain" area height.
