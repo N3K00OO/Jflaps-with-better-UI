@@ -73,9 +73,6 @@ Open it with `Ctrl+K` (or `Cmd+K` on macOS) or via `View > Command Palette...`.
 - Added node + arrow color overrides in the theme customization dialog.
 - Export: tightened image borders and centered automata consistently for PNG/SVG output.
 - Added overrides for final-state outer ring color and start triangle color.
-
-### 2026-02-14 (v7.1.5.1)
-
 - Undo/redo now guarded while transition-edit tables are open to prevent crashes.
 - Transition edit tables cancel safely if the underlying states are no longer valid (prevents addTransition NPE).
 - Fast Run shortcut (`Ctrl+Shift+R`) with a rerun prompt for another input.
